@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Chatbot Platform - Build Your Own AI Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" type="image/png" href="https://img.icons8.com/color/48/000000/chat-bot.png">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="/"><i class="fas fa-robot me-2"></i>RAG Chatbot Platform</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/"><i class="fas fa-home me-1"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/static/dashboard.html"><i class="fas fa-comments me-1"></i> My Chatbots</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/static/contact.html"><i class="fas fa-envelope me-1"></i> Contact</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/static/login.html"><i class="fas fa-sign-in-alt me-1"></i> Login</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="btn btn-light rounded-pill ms-2" href="/static/register.html"><i class="fas fa-user-plus me-1"></i> Sign Up</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-6 text-lg-start text-center mb-4 mb-lg-0">
+                    <h1 class="display-4 fw-bold mb-4">Build Your Own AI Assistant</h1>
+                    <p class="lead mb-4">Create custom AI chatbots powered by your own documents. Upload, train, and deploy RAG chatbots in minutes.</p>
+                    <div class="d-flex flex-wrap justify-content-lg-start justify-content-center gap-2">
+                        <a href="/static/register.html" class="btn btn-light btn-lg"><i class="fas fa-rocket me-2"></i>Get Started</a>
+                        <a href="#how-it-works" class="btn btn-outline-light btn-lg"><i class="fas fa-info-circle me-2"></i>Learn More</a>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <img src="https://cdn.dribbble.com/users/1373705/screenshots/6457914/dribbble-chatbot-callback.gif" class="img-fluid rounded shadow" alt="AI Chatbot Illustration">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="py-5">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="fw-bold mb-3">Powerful Features</h2>
+                <p class="lead text-muted">Everything you need to build and deploy intelligent chatbots</p>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="card feature-card h-100 text-center p-4">
+                        <div class="card-body">
+                            <div class="mb-4">
+                                <i class="fas fa-file-upload fa-3x text-primary"></i>
+                            </div>
+                            <h5 class="card-title">Document Upload</h5>
+                            <p class="card-text">Upload PDFs, DOCX, and TXT files to train your chatbot on your specific content.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card feature-card h-100 text-center p-4">
+                        <div class="card-body">
+                            <div class="mb-4">
+                                <i class="fas fa-brain fa-3x text-primary"></i>
+                            </div>
+                            <h5 class="card-title">Multiple AI Models</h5>
+                            <p class="card-text">Choose from OpenAI, Cohere, or TogetherAI models based on your needs.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card feature-card h-100 text-center p-4">
+                        <div class="card-body">
+                            <div class="mb-4">
+                                <i class="fas fa-project-diagram fa-3x text-primary"></i>
+                            </div>
+                            <h5 class="card-title">RAG Technology</h5>
+                            <p class="card-text">Retrieval-Augmented Generation provides accurate answers based on your documents.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section id="how-it-works" class="py-5 bg-light">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="fw-bold mb-3">How It Works</h2>
+                <p class="lead text-muted">Create your own AI assistant in just three simple steps</p>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="card h-100 border-0 p-4">
+                        <div class="text-center mb-3">
+                            <div class="bg-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <span class="text-white fw-bold">1</span>
+                            </div>
+                        </div>
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Upload Documents</h5>
+                            <p class="card-text">Upload your PDFs, documents, and text files to create a knowledge base.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 border-0 p-4">
+                        <div class="text-center mb-3">
+                            <div class="bg-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <span class="text-white fw-bold">2</span>
+                            </div>
+                        </div>
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Configure Your Bot</h5>
+                            <p class="card-text">Choose an AI model and customize settings for your specific needs.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 border-0 p-4">
+                        <div class="text-center mb-3">
+                            <div class="bg-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <span class="text-white fw-bold">3</span>
+                            </div>
+                        </div>
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Start Chatting</h5>
+                            <p class="card-text">Interact with your bot and get accurate answers based on your documents.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Use Cases -->
+    <section class="py-5">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="fw-bold mb-3">Use Cases</h2>
+                <p class="lead text-muted">Solve real-world problems with custom AI chatbots</p>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="fas fa-briefcase text-primary me-2"></i>Business Automation</h5>
+                            <p class="card-text">Create chatbots for customer support, internal knowledge bases, and process automation.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="fas fa-graduation-cap text-primary me-2"></i>Research Assistant</h5>
+                            <p class="card-text">Upload research papers and get insights and summaries from your documents.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="fas fa-book text-primary me-2"></i>Personal Knowledge</h5>
+                            <p class="card-text">Create a chatbot for your personal notes, books, and learning materials.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials (Placeholder) -->
+    <section class="py-5 bg-light">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="fw-bold mb-3">What Users Say</h2>
+                <p class="lead text-muted">Feedback from our community</p>
+            </div>
+            <div class="row g-4 justify-content-center">
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="mb-3 text-warning">
+                                <i class="fas fa-star"></i>
+                                <i class="fas fa-star"></i>
+                                <i class="fas fa-star"></i>
+                                <i class="fas fa-star"></i>
+                                <i class="fas fa-star"></i>
+                            </div>
+                            <p class="card-text">"This platform simplified our customer support process. We uploaded our product manuals and now have an AI assistant that answers customer queries instantly."</p>
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">JS</div>
+                                <div>
+                                    <h6 class="mb-0">John Smith</h6>
+                                    <small class="text-muted">Product Manager</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="mb-3 text-warning">
+                                <i class="fas fa-star"></i>
+                                <i class="fas fa-star"></i>
+                                <i class="fas fa-star"></i>
+                                <i class="fas fa-star"></i>
+                                <i class="fas fa-star"></i>
+                            </div>
+                            <p class="card-text">"As a researcher, I use this platform to create chatbots from scientific papers. It helps me extract insights and connections I might have missed."</p>
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">EJ</div>
+                                <div>
+                                    <h6 class="mb-0">Emily Johnson</h6>
+                                    <small class="text-muted">Data Scientist</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="py-5 bg-primary text-white">
+        <div class="container text-center">
+            <h2 class="fw-bold mb-4">Ready to Build Your AI Assistant?</h2>
+            <p class="lead mb-4">Get started for free and create your first chatbot in minutes</p>
+            <a href="/static/register.html" class="btn btn-light btn-lg px-5"><i class="fas fa-rocket me-2"></i>Get Started Now</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <h5><i class="fas fa-robot me-2"></i>RAG Chatbot Platform</h5>
+                    <p>Create intelligent AI assistants powered by your own documents using state-of-the-art RAG technology.</p>
+                </div>
+                <div class="col-md-2">
+                    <h5>Product</h5>
+                    <ul class="list-unstyled">
+                        <li><a href="#" class="text-white">Features</a></li>
+                        <li><a href="#" class="text-white">Pricing</a></li>
+                        <li><a href="#" class="text-white">API</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-2">
+                    <h5>Resources</h5>
+                    <ul class="list-unstyled">
+                        <li><a href="#" class="text-white">Documentation</a></li>
+                        <li><a href="#" class="text-white">Tutorials</a></li>
+                        <li><a href="#" class="text-white">Blog</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-2">
+                    <h5>Company</h5>
+                    <ul class="list-unstyled">
+                        <li><a href="/static/about.html" class="text-white">About</a></li>
+                        <li><a href="/static/contact.html" class="text-white">Contact</a></li>
+                        <li><a href="/static/privacy.html" class="text-white">Privacy Policy</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-2">
+                    <h5>Connect</h5>
+                    <div class="d-flex gap-3">
+                        <a href="#" class="text-white fs-5"><i class="fab fa-github"></i></a>
+                        <a href="#" class="text-white fs-5"><i class="fab fa-twitter"></i></a>
+                        <a href="#" class="text-white fs-5"><i class="fab fa-linkedin"></i></a>
+                    </div>
+                </div>
+            </div>
+            <div class="border-top border-secondary pt-4 mt-4 text-center">
+                <p class="mb-0">&copy; 2024 RAG Chatbot Platform. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

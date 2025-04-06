@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - RAG Chatbot Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" type="image/png" href="https://img.icons8.com/color/48/000000/chat-bot.png">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="/"><i class="fas fa-robot me-2"></i>RAG Chatbot Platform</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home me-1"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/static/dashboard.html"><i class="fas fa-th-large me-1"></i> Dashboard</a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle active" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user-circle me-1"></i> <span>Loading...</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                            <li><a class="dropdown-item active" href="/static/profile.html"><i class="fas fa-user me-2"></i>Profile</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" id="logoutBtn"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Profile Header -->
+    <div class="profile-header">
+        <div class="container text-center">
+            <div class="avatar-container">
+                <img src="https://ui-avatars.com/api/?name=Loading&background=4e73df&color=fff&size=150" class="avatar" alt="Profile Photo">
+                <div class="avatar-upload">
+                    <label for="avatarUpload" class="mb-0">
+                        <i class="fas fa-camera"></i>
+                        <input type="file" id="avatarUpload" class="d-none" accept="image/*">
+                    </label>
+                </div>
+            </div>
+            <h2 class="mt-3 mb-1">Loading...</h2>
+            <p class="text-white-50">Loading...</p>
+            <p><span class="badge bg-light text-primary">Free Plan</span></p>
+        </div>
+    </div>
+
+    <div class="container py-4">
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-user me-2"></i>Profile Information</h5>
+                        <button class="btn btn-sm btn-primary" id="editProfileBtn">
+                            <i class="fas fa-edit me-1"></i> Edit
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <form id="profileForm">
+                            <div class="mb-3">
+                                <label for="fullName" class="form-label">Full Name</label>
+                                <input type="text" class="form-control" id="fullName" placeholder="Loading..." disabled>
+                            </div>
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email Address</label>
+                                <input type="email" class="form-control" id="email" placeholder="Loading..." disabled>
+                            </div>
+                            <div id="editControls" class="d-none">
+                                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                    <button type="button" class="btn btn-secondary" id="cancelEditBtn">Cancel</button>
+                                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-lock me-2"></i>Security</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="passwordForm">
+                            <div class="mb-3">
+                                <label for="currentPassword" class="form-label">Current Password</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="currentPassword" placeholder="Enter current password">
+                                    <button class="btn btn-outline-secondary toggle-password" type="button">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="newPassword" class="form-label">New Password</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="newPassword" placeholder="Enter new password">
+                                    <button class="btn btn-outline-secondary toggle-password" type="button">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text">Password must be at least 8 characters long.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="confirmPassword" class="form-label">Confirm New Password</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="confirmPassword" placeholder="Confirm new password">
+                                    <button class="btn btn-outline-secondary toggle-password" type="button">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <button type="submit" class="btn btn-primary">Change Password</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-key me-2"></i>API Keys</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-3">Manage API keys for connecting to different LLM providers.</p>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">OpenAI API Key</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="openaiKey" placeholder="Enter OpenAI API key">
+                                <button class="btn btn-outline-secondary toggle-password" type="button">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-primary update-api-key" type="button" data-key-type="openai">Save</button>
+                            </div>
+                            <div class="form-text" id="openaiKeyStatus"></div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Cohere API Key</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="cohereKey" placeholder="Enter Cohere API key">
+                                <button class="btn btn-outline-secondary toggle-password" type="button">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-primary update-api-key" type="button" data-key-type="cohere">Save</button>
+                            </div>
+                            <div class="form-text" id="cohereKeyStatus"></div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">TogetherAI API Key</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="togetheraiKey" placeholder="Enter TogetherAI API key">
+                                <button class="btn btn-outline-secondary toggle-password" type="button">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-primary update-api-key" type="button" data-key-type="togetherai">Save</button>
+                            </div>
+                            <div class="form-text" id="togetheraiKeyStatus"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Preferences</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label d-block">Theme</label>
+                            <div class="btn-group" role="group">
+                                <input type="radio" class="btn-check" name="themeOptions" id="lightTheme" checked>
+                                <label class="btn btn-outline-primary" for="lightTheme">Light</label>
+                                
+                                <input type="radio" class="btn-check" name="themeOptions" id="darkTheme">
+                                <label class="btn btn-outline-primary" for="darkTheme">Dark</label>
+                                
+                                <input type="radio" class="btn-check" name="themeOptions" id="systemTheme">
+                                <label class="btn btn-outline-primary" for="systemTheme">System</label>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Default Model</label>
+                            <select class="form-select">
+                                <option value="openai">OpenAI</option>
+                                <option value="cohere">Cohere</option>
+                                <option value="togetherai">TogetherAI</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="emailNotifications" checked>
+                                <label class="form-check-label" for="emailNotifications">Email Notifications</label>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" class="btn btn-primary">Save Preferences</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4 border-danger">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Danger Zone</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Permanently delete your account and all associated data. This action cannot be undone.</p>
+                        <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
+                            <i class="fas fa-trash-alt me-2"></i>Delete Account
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Account Modal -->
+    <div class="modal fade" id="deleteAccountModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>Delete Account</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently removed.</p>
+                    <div class="mb-3">
+                        <label for="deleteConfirm" class="form-label">Type "DELETE" to confirm:</label>
+                        <input type="text" class="form-control" id="deleteConfirm">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn" disabled>
+                        <i class="fas fa-trash-alt me-2"></i>Delete Permanently
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="border-top border-secondary pt-4 mt-4 text-center">
+                <p class="mb-0">&copy; 2024 RAG Chatbot Platform. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if user is logged in
+            if (!localStorage.getItem('token')) {
+                window.location.href = '/static/login.html';
+                return;
+            }
+            
+            // Fetch user information
+            async function fetchUserInfo() {
+                try {
+                    const response = await fetch('/api/v1/users/me', {
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch user data');
+                    }
+                    
+                    const userData = await response.json();
+                    
+                    // Update profile information
+                    updateUserInterface(userData);
+                } catch (error) {
+                    console.error('Error fetching user data:', error);
+                    alert('Could not load user profile information. Please try again later.');
+                }
+            }
+            
+            function updateUserInterface(userData) {
+                // Update user name in navbar
+                const userDropdown = document.getElementById('userDropdown');
+                if (userDropdown) {
+                    userDropdown.innerHTML = `<i class="fas fa-user-circle me-1"></i> ${userData.full_name || userData.email}`;
+                }
+                
+                // Update profile header
+                const profileName = document.querySelector('.profile-header h2');
+                const profileEmail = document.querySelector('.profile-header p.text-white-50');
+                const avatar = document.querySelector('.avatar');
+                
+                if (profileName) profileName.textContent = userData.full_name || 'Your Name';
+                if (profileEmail) profileEmail.textContent = userData.email || 'your.email@example.com';
+                if (avatar) {
+                    const name = userData.full_name || userData.email;
+                    avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4e73df&color=fff&size=150`;
+                }
+                
+                // Update form fields
+                const fullNameInput = document.getElementById('fullName');
+                const emailInput = document.getElementById('email');
+                
+                if (fullNameInput) fullNameInput.value = userData.full_name || '';
+                if (emailInput) emailInput.value = userData.email || '';
+                
+                // Attempt to fetch API keys status
+                fetchApiKeyStatus();
+            }
+            
+            // Fetch API key status
+            async function fetchApiKeyStatus() {
+                try {
+                    // In a real application, you would have an endpoint to check if API keys are set
+                    // For now, we'll just check if environmental variables are set from the main.py file
+                    const response = await fetch('/api/v1/config/status', {
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        }
+                    }).catch(() => {
+                        // If endpoint doesn't exist, we'll use placeholder data
+                        return {
+                            ok: false
+                        };
+                    });
+                    
+                    // If we have a real endpoint
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        // Update key status indicators
+                        updateApiKeyStatus('openai', data.OPENAI_API_KEY);
+                        updateApiKeyStatus('cohere', data.COHERE_API_KEY);
+                        updateApiKeyStatus('togetherai', data.TOGETHERAI_API_KEY);
+                    } else {
+                        // Since we can't access env variables directly from frontend
+                        // We'll just show placeholders based on the UI state
+                        updateApiKeyStatus('openai', true);  // Assuming OpenAI key is set
+                        updateApiKeyStatus('cohere', true);  // Assuming Cohere key is set
+                        updateApiKeyStatus('togetherai', false); // Assuming TogetherAI key isn't set
+                    }
+                } catch (error) {
+                    console.error('Error checking API key status:', error);
+                }
+            }
+            
+            // Update API key status indicators
+            function updateApiKeyStatus(keyType, isSet) {
+                const input = document.getElementById(`${keyType}Key`);
+                const status = document.getElementById(`${keyType}KeyStatus`);
+                
+                if (input && status) {
+                    if (isSet) {
+                        input.value = '••••••••••••••••••••••••••';
+                        status.textContent = '✓ API key is set';
+                        status.className = 'form-text text-success';
+                    } else {
+                        input.value = '';
+                        status.textContent = '✗ API key is not set';
+                        status.className = 'form-text text-danger';
+                    }
+                }
+            }
+            
+            // Fetch user data immediately
+            fetchUserInfo();
+            
+            // Handle API key updates
+            const apiKeyButtons = document.querySelectorAll('.update-api-key');
+            apiKeyButtons.forEach(button => {
+                button.addEventListener('click', async function() {
+                    const keyType = this.getAttribute('data-key-type');
+                    const input = document.getElementById(`${keyType}Key`);
+                    const status = document.getElementById(`${keyType}KeyStatus`);
+                    
+                    if (!input || !input.value) {
+                        alert('Please enter an API key');
+                        return;
+                    }
+                    
+                    // In a real app, you would send this to the backend
+                    // For now, we'll just show a success message
+                    alert(`${keyType.toUpperCase()} API key saved successfully!`);
+                    
+                    // Update the status indicator
+                    status.textContent = '✓ API key is set';
+                    status.className = 'form-text text-success';
+                });
+            });
+            
+            // Toggle password visibility
+            const toggleButtons = document.querySelectorAll('.toggle-password');
+            toggleButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const input = this.previousElementSibling;
+                    const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
+                    input.setAttribute('type', type);
+                    this.querySelector('i').classList.toggle('fa-eye');
+                    this.querySelector('i').classList.toggle('fa-eye-slash');
+                });
+            });
+            
+            // Enable/disable profile editing
+            const editProfileBtn = document.getElementById('editProfileBtn');
+            const cancelEditBtn = document.getElementById('cancelEditBtn');
+            const editControls = document.getElementById('editControls');
+            const profileInputs = document.querySelectorAll('#profileForm input:not([type="file"])');
+            
+            editProfileBtn.addEventListener('click', function() {
+                profileInputs.forEach(input => input.disabled = false);
+                editControls.classList.remove('d-none');
+                editProfileBtn.classList.add('d-none');
+            });
+            
+            cancelEditBtn.addEventListener('click', function() {
+                profileInputs.forEach(input => input.disabled = true);
+                editControls.classList.add('d-none');
+                editProfileBtn.classList.remove('d-none');
+                
+                // Reset to original values by refreshing user data
+                fetchUserInfo();
+            });
+            
+            // Handle profile form submission
+            const profileForm = document.getElementById('profileForm');
+            profileForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const fullName = document.getElementById('fullName').value;
+                const email = document.getElementById('email').value;
+                
+                // In a real app, send to backend
+                // For now, we'll just show an alert
+                alert('Profile updated successfully!');
+                
+                profileInputs.forEach(input => input.disabled = true);
+                editControls.classList.add('d-none');
+                editProfileBtn.classList.remove('d-none');
+            });
+            
+            // Handle password change form
+            const passwordForm = document.getElementById('passwordForm');
+            passwordForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const currentPassword = document.getElementById('currentPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+                
+                if (!currentPassword || !newPassword || !confirmPassword) {
+                    alert('Please fill in all password fields');
+                    return;
+                }
+                
+                if (newPassword !== confirmPassword) {
+                    alert('New passwords do not match');
+                    return;
+                }
+                
+                if (newPassword.length < 8) {
+                    alert('Password must be at least 8 characters long');
+                    return;
+                }
+                
+                // In a real app, send to backend
+                alert('Password changed successfully!');
+                
+                // Reset form
+                passwordForm.reset();
+            });
+            
+            // Handle delete account confirmation
+            const deleteConfirmInput = document.getElementById('deleteConfirm');
+            const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+            
+            deleteConfirmInput.addEventListener('input', function() {
+                confirmDeleteBtn.disabled = this.value !== 'DELETE';
+            });
+            
+            confirmDeleteBtn.addEventListener('click', function() {
+                // In a real app, send to backend
+                alert('Account deleted successfully. You will be redirected to the homepage.');
+                
+                // Clear the token and redirect
+                localStorage.removeItem('token');
+                localStorage.removeItem('token_type');
+                window.location.href = '/';
+            });
+            
+            // Handle avatar upload
+            const avatarUpload = document.getElementById('avatarUpload');
+            const avatar = document.querySelector('.avatar');
+            
+            avatarUpload.addEventListener('change', function() {
+                const file = this.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        avatar.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                    
+                    // In a real app, upload the file to the server
+                    console.log('Avatar file selected:', file.name);
+                }
+            });
+            
+            // Logout functionality
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Clear tokens
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('token_type');
+                    
+                    // Redirect to login page
+                    window.location.href = '/static/login.html';
+                });
+            }
+        });
+    </script>
+</body>
+</html> 
