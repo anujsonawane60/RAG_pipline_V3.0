@@ -100,6 +100,7 @@
                                             <th>Name</th>
                                             <th>Created By</th>
                                             <th>Date</th>
+                                            <th>Public</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -243,11 +244,24 @@
                         ? new Date(chatbot.date).toLocaleString() 
                         : 'Unknown';
                     
+                    // Get public status
+                    const isPublic = chatbot.is_public || false;
+                    
                     row.innerHTML = `
                         <td><small class="text-muted">${chatbot.id}</small></td>
                         <td><strong>${chatbot.name}</strong></td>
                         <td>${chatbot.user_id || 'System'}</td>
                         <td>${chatbotDate}</td>
+                        <td>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input toggle-public" type="checkbox" role="switch" 
+                                    id="publicToggle-${chatbot.id}" ${isPublic ? 'checked' : ''} 
+                                    data-id="${chatbot.id}" data-name="${chatbot.name}">
+                                <label class="form-check-label" for="publicToggle-${chatbot.id}">
+                                    ${isPublic ? 'Public' : 'Private'}
+                                </label>
+                            </div>
+                        </td>
                         <td>
                             <div class="btn-group">
                                 <button class="btn btn-sm btn-primary view-chatbot" data-id="${chatbot.id}" data-name="${chatbot.name}">
@@ -276,6 +290,22 @@
                         const chatbotId = btn.getAttribute('data-id');
                         const chatbotName = btn.getAttribute('data-name');
                         confirmDeleteChatbot(chatbotId, chatbotName);
+                    });
+                });
+
+                // Add after the event listeners for action buttons
+                document.querySelectorAll('.toggle-public').forEach(toggle => {
+                    toggle.addEventListener('change', () => {
+                        const chatbotId = toggle.getAttribute('data-id');
+                        const chatbotName = toggle.getAttribute('data-name');
+                        const isPublic = toggle.checked;
+                        
+                        // Update label text
+                        const label = toggle.nextElementSibling;
+                        label.textContent = isPublic ? 'Public' : 'Private';
+                        
+                        // Update chatbot visibility
+                        toggleChatbotPublic(chatbotId, chatbotName, isPublic);
                     });
                 });
             } catch (error) {
@@ -382,6 +412,37 @@
                 redirectToLogin();
             });
         });
+
+        // Add function to toggle chatbot public status
+        async function toggleChatbotPublic(chatbotId, chatbotName, isPublic) {
+            try {
+                const response = await fetchWithAuthRetry(`/chatbot/${chatbotId}/update-visibility`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_public: isPublic })
+                });
+
+                if (response && response.ok) {
+                    showAlert(`Chatbot "${chatbotName}" is now ${isPublic ? 'public' : 'private'}`, 'success');
+                } else {
+                    // Revert toggle if update failed
+                    const toggle = document.getElementById(`publicToggle-${chatbotId}`);
+                    if (toggle) {
+                        toggle.checked = !isPublic;
+                        const label = toggle.nextElementSibling;
+                        if (label) {
+                            label.textContent = !isPublic ? 'Public' : 'Private';
+                        }
+                    }
+                    
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to update chatbot visibility');
+                }
+            } catch (error) {
+                console.error('Error updating chatbot visibility:', error);
+                showAlert(`Error updating visibility: ${error.message}`, 'danger');
+            }
+        }
     </script>
 </body>
 </html> 

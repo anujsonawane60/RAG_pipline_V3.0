@@ -14,5 +14,15 @@
     "files": [],
     "index_name": "rag-chatbot-satyajit-satyachatbot-1744311051",
     "user_id": "satyajit"
+  },
+  "public01": {
+    "name": "public01",
+    "creation_date": "2025-04-11 01:05:27",
+    "files": [
+      "Anuj CanspiritAI certificate.pdf"
+    ],
+    "index_name": "rag-chatbot-public01-1744313708",
+    "user_id": null,
+    "is_public": true
   }
 }

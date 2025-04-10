@@ -50,6 +50,9 @@ except Exception as e:
 # OAuth2 bearer token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+# OAuth2 schemes for authentication
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+
 # Define User models
 class User(BaseModel):
     username: str
@@ -119,45 +122,21 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
     try:
-        # Basic token format validation
-        if not token or len(token) < 10:
-            print("Token is missing or too short")
-            raise credentials_exception
-            
-        # Print token for debugging (remove in production)
-        token_prefix = token[:15] if len(token) >= 15 else token
-        print(f"Validating token: {token_prefix}...")
-        
-        # Try to decode token
-        try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            print(f"Token payload: {payload}")
-        except jwt.ExpiredSignatureError:
-            print("Token has expired")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        except jwt.JWTError as e:
-            print(f"JWT Error: {str(e)}")
-            raise credentials_exception
-        except Exception as e:
-            print(f"Unexpected error decoding token: {str(e)}")
-            raise credentials_exception
-            
-        # Extract username from token payload
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        is_host: bool = payload.get("is_host", False)
+        
         if username is None:
-            print("Username missing from token")
+            print(f"Username not found in token")
             raise credentials_exception
-        
-        # Extract is_host from token payload
-        is_host = payload.get("is_host", False)
+            
         token_data = TokenData(username=username, is_host=is_host)
-        
-        print(f"Token validated for user: {username}, is_host: {is_host}")
+        print(f"Token data parsed: {username}, is_host: {is_host}")
+    except JWTError as e:
+        print(f"JWT decode error: {str(e)}")
+        raise credentials_exception
     except Exception as e:
         print(f"Authentication error: {str(e)}")
         raise credentials_exception
@@ -199,6 +178,53 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
     if current_user.disabled:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+# Optional authentication - doesn't throw an exception if token is missing or invalid
+async def get_current_user_optional(token: str = Depends(oauth2_scheme_optional)):
+    if not token:
+        return None
+        
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        is_host: bool = payload.get("is_host", False)
+        
+        if username is None:
+            return None
+            
+        token_data = TokenData(username=username, is_host=is_host)
+    except JWTError:
+        return None
+    except Exception:
+        return None
+    
+    # Get user from token data
+    try:
+        # Special case for host admin
+        if token_data.username == HOST_USERNAME:
+            user = UserInDB(
+                username=HOST_USERNAME,
+                hashed_password=get_password_hash(HOST_PASSWORD),
+                is_host=True,
+                email="admin@example.com"
+            )
+        else:
+            # Get regular user from database
+            user = get_user(username=token_data.username)
+        
+        if user is None:
+            return None
+        
+        # Convert from UserInDB to User to avoid serializing hashed password
+        return User(
+            username=user.username,
+            email=user.email,
+            full_name=user.full_name,
+            disabled=user.disabled,
+            is_host=user.is_host or token_data.is_host
+        )
+    except Exception:
+        return None
 
 # Verify if user is host admin
 async def get_host_admin(current_user: User = Depends(get_current_user)):
@@ -448,8 +474,8 @@ class ChatbotManager:
             print(f"Error saving chatbots: {str(e)}")
             return False
 
-    def create_chatbot(self, chatbot_name: str, user_id: str = None):
-        print(f"Creating chatbot: {chatbot_name} for user: {user_id}")
+    def create_chatbot(self, chatbot_name: str, user_id: str = None, is_public: bool = False):
+        print(f"Creating chatbot: {chatbot_name} for user: {user_id}, public: {is_public}")
         
         # Validate chatbot name
         if not re.match(r'^[a-zA-Z0-9-]+$', chatbot_name):
@@ -502,7 +528,8 @@ class ChatbotManager:
             "creation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "files": [],
             "index_name": pinecone_index_name,
-            "user_id": user_id
+            "user_id": user_id,
+            "is_public": is_public  # Add flag for public chatbots
         }
         
         # Save to file
@@ -514,7 +541,7 @@ class ChatbotManager:
             "chatbot_id": chatbot_id,
             "index_name": pinecone_index_name
         }
-        
+
     def delete_chatbot(self, chatbot_id: str):
         """Delete a chatbot and its resources"""
         try:
@@ -669,6 +696,28 @@ class ChatbotManager:
                 print(f"Error reading chat history: {str(e)}")
         
         return []
+
+    def get_public_chatbots(self) -> List[Dict]:
+        """Get all public chatbots"""
+        public_chatbots = []
+        
+        try:
+            for chatbot_id, chatbot_info in self.chatbots.items():
+                if chatbot_info.get('is_public', False):
+                    # Ensure consistent date field name
+                    creation_date = chatbot_info.get('creation_date') or chatbot_info.get('created_date', 'Unknown')
+                    
+                    public_chatbots.append({
+                        'id': chatbot_id,
+                        'name': chatbot_info.get('name', chatbot_id.split('-')[-1]),
+                        'files': chatbot_info.get('files', []),
+                        'date': creation_date,
+                        'user_id': chatbot_info.get('user_id', 'Unknown')
+                    })
+            return public_chatbots
+        except Exception as e:
+            print(f"Error getting public chatbots: {str(e)}")
+            return []
 
 class UserManager:
     def __init__(self, file_path="data/users.json"):
@@ -827,6 +876,7 @@ async def create_chatbot(request: Request, current_user: User = Depends(get_curr
     try:
         data = await request.json()
         chatbot_name = data.get("name")
+        is_public = data.get("is_public", False)
         
         if not chatbot_name:
             raise HTTPException(
@@ -838,14 +888,15 @@ async def create_chatbot(request: Request, current_user: User = Depends(get_curr
         user_id = None if (current_user.is_host or current_user.username == HOST_USERNAME) else current_user.username
         
         try:
-            result = chatbot_manager.create_chatbot(chatbot_name, user_id)
+            result = chatbot_manager.create_chatbot(chatbot_name, user_id, is_public)
             
             # Format response to match what frontend expects
             return {
                 "status": "success",
                 "message": f"Chatbot '{chatbot_name}' created successfully",
                 "chatbot_id": result["chatbot_id"],
-                "name": chatbot_name
+                "name": chatbot_name,
+                "is_public": is_public
             }
         except ValueError as ve:
             # Handle validation errors
@@ -1023,21 +1074,44 @@ async def upload_file(chatbot_id: str, file: UploadFile = File(...), current_use
             detail=f"Failed to upload file: {str(e)}"
         )
 
-@app.post("/chatbot/{chatbot_name}/ask")
-async def chat_with_bot(chatbot_name: str, request: QueryRequest, current_user: User = Depends(get_current_active_user)):
-    # Check if user has access to this chatbot
-    if not (getattr(current_user, "is_host", False) or current_user.username == HOST_USERNAME):
-        # For regular users, check if the chatbot belongs to them
-        chatbot_info = chatbot_manager.chatbots.get(chatbot_name)
-        if not chatbot_info or chatbot_info.get("user_id") != current_user.username:
-            raise HTTPException(status_code=403, detail="You don't have permission to use this chatbot")
-
-    if chatbot_name not in chatbot_manager.chatbots:
-        raise HTTPException(404, "Chatbot not found")
-
+@app.post("/chatbot/{chatbot_id}/ask")
+async def chat_with_bot(
+    chatbot_id: str, 
+    request: QueryRequest, 
+    current_user: User = Depends(get_current_user_optional)
+):
+    # Check if chatbot exists
+    if chatbot_id not in chatbot_manager.chatbots:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Chatbot {chatbot_id} not found"
+        )
+        
+    # Get chatbot information
+    chatbot_info = chatbot_manager.chatbots[chatbot_id]
+    is_public_chatbot = chatbot_info.get("is_public", False)
+    
+    # For non-public chatbots, verify authentication
+    if not is_public_chatbot:
+        # Ensure user is authenticated
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required for this chatbot"
+            )
+            
+        # Check if user has access (admin or owner)
+        if not (current_user.is_host or current_user.username == HOST_USERNAME):
+            # For regular users, check if the chatbot belongs to them
+            if chatbot_info.get("user_id") != current_user.username:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have permission to access this chatbot"
+                )
+    
     try:
         # Get the index name for this chatbot
-        index_name = chatbot_manager.chatbots[chatbot_name]["index_name"]
+        index_name = chatbot_manager.chatbots[chatbot_id]["index_name"]
         
         # Initialize service manager for this chatbot
         service_manager = ServiceManager()
@@ -1061,7 +1135,7 @@ async def chat_with_bot(chatbot_name: str, request: QueryRequest, current_user: 
         contexts = [match.metadata['text'] for match in search_results.matches]
         
         # Get chat history
-        chat_history = chatbot_manager.get_chat_history(chatbot_name)
+        chat_history = chatbot_manager.get_chat_history(chatbot_id)
         # Get the last 3 conversations for context (reduced from 5)
         recent_history = chat_history[-3:] if len(chat_history) > 3 else chat_history
         
@@ -1148,9 +1222,10 @@ Please provide a clear and concise answer based on both the context and conversa
             else:
                 raise HTTPException(400, f"Unsupported model: {request.model}")
 
-            # Save chat history
-            chatbot_manager.save_chat_history(chatbot_name, request.query, answer)
-
+            # Save chat history if authenticated
+            if current_user:
+                chatbot_manager.save_chat_history(chatbot_id, request.query, answer)
+            
             return JSONResponse(
                 content={
                     "status": "success",
@@ -1309,6 +1384,63 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @app.get("/users/me", response_model=User)
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
     return current_user
+
+@app.get("/public-chatbots")
+async def list_public_chatbots():
+    try:
+        # Get all public chatbots
+        chatbots = chatbot_manager.get_public_chatbots()
+        
+        return {"chatbots": chatbots}
+    except Exception as e:
+        print(f"Error listing public chatbots: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list public chatbots: {str(e)}"
+        )
+
+@app.post("/chatbot/{chatbot_id}/update-visibility")
+async def update_chatbot_visibility(
+    chatbot_id: str, 
+    request: Request, 
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Check if chatbot exists
+        if chatbot_id not in chatbot_manager.chatbots:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Chatbot {chatbot_id} not found"
+            )
+            
+        # Only host admins can change visibility
+        if not (current_user.is_host or current_user.username == HOST_USERNAME):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only administrators can change chatbot visibility"
+            )
+        
+        data = await request.json()
+        is_public = data.get("is_public", False)
+        
+        # Update chatbot visibility
+        chatbot_manager.chatbots[chatbot_id]["is_public"] = is_public
+        chatbot_manager.save_chatbots()
+        
+        return {
+            "status": "success",
+            "message": f"Chatbot {chatbot_id} visibility updated",
+            "is_public": is_public
+        }
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error updating chatbot visibility: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update chatbot visibility: {str(e)}"
+        )
 
 if __name__ == "__main__":
     try:

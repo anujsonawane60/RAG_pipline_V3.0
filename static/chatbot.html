@@ -354,6 +354,18 @@
                         <label for="chatbotNameInput" class="form-label">Chatbot Name</label>
                         <input type="text" class="form-control" id="chatbotNameInput" placeholder="Enter chatbot name">
                     </div>
+                    <!-- Public checkbox (visible only to admin) -->
+                    <div class="mb-3 d-none" id="publicChatbotOption">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="publicChatbotCheckbox">
+                            <label class="form-check-label" for="publicChatbotCheckbox">
+                                Make this chatbot public
+                            </label>
+                            <small class="form-text text-muted d-block">
+                                Public chatbots can be accessed by anyone, even without login
+                            </small>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -423,9 +435,13 @@
                 alert('Chatbot name can only contain letters, numbers, and hyphens');
                 return;
             }
+            
+            // Check if public option is checked (for admin users)
+            const publicCheckbox = document.getElementById('publicChatbotCheckbox');
+            const isPublic = publicCheckbox && publicCheckbox.checked;
 
             try {
-                console.log("Creating chatbot with name:", name);
+                console.log("Creating chatbot with name:", name, "public:", isPublic);
                 
                 // Show loading state
                 const submitBtn = document.querySelector("#createChatbotModal .btn-primary");
@@ -439,7 +455,10 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ name })
+                    body: JSON.stringify({ 
+                        name,
+                        is_public: isPublic 
+                    })
                 });
                 
                 // If auth failed, fetchWithAuthRetry will return null
@@ -931,6 +950,8 @@
                     // Show admin dashboard link if user is host
                     if (user.is_host) {
                         document.getElementById('admin-dashboard-link').classList.remove('d-none');
+                        // Also show public chatbot option in create modal
+                        document.getElementById('publicChatbotOption').classList.remove('d-none');
                     }
                     
                     // Show main content

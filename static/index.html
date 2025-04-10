@@ -5,29 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RAG Chatbot Platform</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .hero-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
             color: white;
-            padding: 100px 0;
+            padding: 80px 0;
+            margin-bottom: 40px;
         }
+        
         .feature-card {
-            border: none;
-            transition: transform 0.3s ease;
+            border-radius: 10px;
+            transition: transform 0.3s;
+            margin-bottom: 20px;
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
         }
+        
         .feature-card:hover {
             transform: translateY(-5px);
         }
+        
         .feature-icon {
             font-size: 2.5rem;
             margin-bottom: 1rem;
-            color: #667eea;
+            color: #4e73df;
+        }
+        
+        .public-chatbot-card {
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+            border: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .public-chatbot-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        
+        .public-chatbot-header {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 15px;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+        }
+        
+        .chatbot-icon {
+            font-size: 2rem;
+            color: #4e73df;
+            margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
             <a class="navbar-brand" href="/">RAG Chatbot Platform</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -36,15 +69,15 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="/">Home</a>
+                        <a class="nav-link active" href="/">Home</a>
                     </li>
-                    <li class="nav-item" id="chatbotsNavItem">
-                        <a class="nav-link" href="/static/chatbot.html">Chatbots</a>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/static/chatbot.html">Dashboard</a>
                     </li>
-                    <li class="nav-item" id="loginNavItem">
+                    <li class="nav-item" id="loginLink">
                         <a class="nav-link" href="/static/auth.html">Login</a>
                     </li>
-                    <li class="nav-item d-none" id="logoutNavItem">
+                    <li class="nav-item d-none" id="logoutLink">
                         <a class="nav-link" href="#" id="logoutBtn">Logout</a>
                     </li>
                 </ul>
@@ -55,103 +88,323 @@
     <!-- Hero Section -->
     <section class="hero-section">
         <div class="container text-center">
-            <h1 class="display-4 mb-4">Welcome to RAG Chatbot Platform</h1>
-            <p class="lead mb-4">Create, manage, and interact with AI-powered chatbots using state-of-the-art RAG technology</p>
-            <div id="heroButtons">
-                <a href="/static/auth.html" class="btn btn-light btn-lg me-2">Login</a>
-                <a href="/static/auth.html?register=true" class="btn btn-outline-light btn-lg">Register</a>
-            </div>
-            <div id="welcomeUser" class="d-none mt-4">
-                <h4 class="text-white">Welcome, <span id="username"></span>!</h4>
-                <a href="/static/chatbot.html" class="btn btn-light btn-lg mt-2">Go to My Chatbots</a>
+            <h1 class="display-4">Welcome to RAG Chatbot Platform</h1>
+            <p class="lead">Create custom chatbots trained on your own documents using Retrieval-Augmented Generation</p>
+            <a href="/static/chatbot.html" class="btn btn-light btn-lg mt-3">
+                <i class="fas fa-robot me-2"></i>Get Started
+            </a>
+        </div>
+    </section>
+
+    <!-- Public Chatbots Section -->
+    <section class="container mb-5">
+        <h2 class="text-center mb-4">
+            <i class="fas fa-globe me-2"></i>Public Chatbots
+        </h2>
+        <div class="row" id="publicChatbots">
+            <div class="col-12 text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="text-muted mt-2">Loading public chatbots...</p>
             </div>
         </div>
     </section>
 
     <!-- Features Section -->
-    <section class="py-5">
-        <div class="container">
-            <h2 class="text-center mb-5">Key Features</h2>
-            <div class="row g-4">
-                <div class="col-md-4">
-                    <div class="card feature-card h-100 text-center p-4">
-                        <div class="card-body">
-                            <div class="feature-icon">📚</div>
-                            <h5 class="card-title">Multiple AI Models</h5>
-                            <p class="card-text">Choose from OpenAI, Cohere, or TogetherAI models for your chatbot</p>
+    <section class="container mb-5">
+        <h2 class="text-center mb-4">Key Features</h2>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card feature-card h-100">
+                    <div class="card-body text-center">
+                        <div class="feature-icon">
+                            <i class="fas fa-robot"></i>
                         </div>
+                        <h4>Custom Chatbots</h4>
+                        <p class="text-muted">Create chatbots trained on your specific documents and data sources.</p>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="card feature-card h-100 text-center p-4">
-                        <div class="card-body">
-                            <div class="feature-icon">📄</div>
-                            <h5 class="card-title">Document Processing</h5>
-                            <p class="card-text">Support for PDF, DOCX, and TXT file formats with automatic text extraction</p>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card h-100">
+                    <div class="card-body text-center">
+                        <div class="feature-icon">
+                            <i class="fas fa-file-upload"></i>
                         </div>
+                        <h4>Document Upload</h4>
+                        <p class="text-muted">Upload PDFs, Word documents, and text files to train your chatbot.</p>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="card feature-card h-100 text-center p-4">
-                        <div class="card-body">
-                            <div class="feature-icon">💾</div>
-                            <h5 class="card-title">Vector Storage</h5>
-                            <p class="card-text">Efficient storage and retrieval using Pinecone vector database</p>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card h-100">
+                    <div class="card-body text-center">
+                        <div class="feature-icon">
+                            <i class="fas fa-brain"></i>
                         </div>
+                        <h4>Advanced AI Models</h4>
+                        <p class="text-muted">Choose from OpenAI, Cohere, and other LLM providers for your chatbot.</p>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="bg-dark text-light py-4">
-        <div class="container text-center">
-            <p class="mb-0">© 2024 RAG Chatbot Platform. All rights reserved.</p>
+    <!-- Public Chatbot Access Modal -->
+    <div class="modal fade" id="publicChatbotModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="chatbotModalTitle"><i class="fas fa-robot me-2"></i>Chatbot</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="chat-container mb-3" style="height: 300px; overflow-y: auto; background-color: #f8f9fa; padding: 15px; border-radius: 8px;" id="chatMessages">
+                        <!-- Chat messages will appear here -->
+                        <div class="text-center p-3 text-muted">
+                            <i class="fas fa-robot fa-3x mb-3"></i>
+                            <p>Start a conversation with this chatbot!</p>
+                        </div>
+                    </div>
+                    <div class="input-group mb-3">
+                        <select class="form-select" id="modelSelect" style="max-width: 150px;">
+                            <option value="openai">OpenAI</option>
+                            <option value="cohere">Cohere</option>
+                            <option value="togetherai">TogetherAI</option>
+                        </select>
+                        <input type="text" class="form-control" id="messageInput" placeholder="Type your message...">
+                        <button class="btn btn-primary" id="sendMessageBtn">
+                            <i class="fas fa-paper-plane me-1"></i> Send
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
-    </footer>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Check authentication status when page loads
-        document.addEventListener('DOMContentLoaded', async function() {
+        // Current public chatbot ID
+        let currentChatbotId = null;
+        const chatbotModal = new bootstrap.Modal(document.getElementById('publicChatbotModal'));
+        
+        // Check if user is logged in
+        document.addEventListener('DOMContentLoaded', function() {
             const token = localStorage.getItem('token');
             
             if (token) {
-                try {
-                    const response = await fetch('/users/me', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                    
-                    if (response.ok) {
-                        const user = await response.json();
-                        
-                        // Show logged in UI
-                        document.getElementById('loginNavItem').classList.add('d-none');
-                        document.getElementById('logoutNavItem').classList.remove('d-none');
-                        document.getElementById('heroButtons').classList.add('d-none');
-                        document.getElementById('welcomeUser').classList.remove('d-none');
-                        document.getElementById('username').textContent = user.username;
-                    } else {
-                        // Token invalid, clear it
-                        localStorage.removeItem('token');
-                        localStorage.removeItem('token_type');
-                    }
-                } catch (error) {
-                    console.error('Error checking auth status:', error);
-                }
+                document.getElementById('loginLink').classList.add('d-none');
+                document.getElementById('logoutLink').classList.remove('d-none');
+            } else {
+                document.getElementById('loginLink').classList.remove('d-none');
+                document.getElementById('logoutLink').classList.add('d-none');
             }
+            
+            // Load public chatbots
+            loadPublicChatbots();
+            
+            // Setup logout button
+            document.getElementById('logoutBtn').addEventListener('click', function(e) {
+                e.preventDefault();
+                localStorage.removeItem('token');
+                localStorage.removeItem('token_type');
+                localStorage.removeItem('username');
+                window.location.reload();
+            });
+            
+            // Setup send message button
+            document.getElementById('sendMessageBtn').addEventListener('click', sendMessage);
+            document.getElementById('messageInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
         });
         
-        // Handle logout
-        document.getElementById('logoutBtn').addEventListener('click', function(e) {
-            e.preventDefault();
-            localStorage.removeItem('token');
-            localStorage.removeItem('token_type');
-            window.location.reload();
-        });
+        // Load public chatbots
+        async function loadPublicChatbots() {
+            try {
+                const response = await fetch('/public-chatbots');
+                const data = await response.json();
+                
+                const chatbotsContainer = document.getElementById('publicChatbots');
+                chatbotsContainer.innerHTML = '';
+                
+                if (!data.chatbots || data.chatbots.length === 0) {
+                    chatbotsContainer.innerHTML = `
+                        <div class="col-12 text-center">
+                            <p class="text-muted">No public chatbots available at the moment.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Display public chatbots
+                data.chatbots.forEach(chatbot => {
+                    const col = document.createElement('div');
+                    col.className = 'col-md-4';
+                    
+                    col.innerHTML = `
+                        <div class="card public-chatbot-card">
+                            <div class="public-chatbot-header">
+                                <h5 class="mb-0">${chatbot.name}</h5>
+                            </div>
+                            <div class="card-body text-center">
+                                <div class="chatbot-icon">
+                                    <i class="fas fa-robot"></i>
+                                </div>
+                                <p class="text-muted">Created by: ${chatbot.user_id || 'Admin'}</p>
+                                <button class="btn btn-primary chat-btn" data-id="${chatbot.id}" data-name="${chatbot.name}">
+                                    <i class="fas fa-comments me-1"></i> Chat Now
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    chatbotsContainer.appendChild(col);
+                });
+                
+                // Add event listeners to chat buttons
+                document.querySelectorAll('.chat-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const chatbotId = this.getAttribute('data-id');
+                        const chatbotName = this.getAttribute('data-name');
+                        openChatModal(chatbotId, chatbotName);
+                    });
+                });
+            } catch (error) {
+                console.error('Error loading public chatbots:', error);
+                document.getElementById('publicChatbots').innerHTML = `
+                    <div class="col-12 text-center">
+                        <p class="text-danger">Error loading public chatbots. Please try again later.</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Open chat modal for a public chatbot
+        function openChatModal(chatbotId, chatbotName) {
+            currentChatbotId = chatbotId;
+            document.getElementById('chatbotModalTitle').innerHTML = `<i class="fas fa-robot me-2"></i>${chatbotName}`;
+            document.getElementById('chatMessages').innerHTML = `
+                <div class="text-center p-3 text-muted">
+                    <i class="fas fa-robot fa-3x mb-3"></i>
+                    <p>Start a conversation with ${chatbotName}!</p>
+                </div>
+            `;
+            document.getElementById('messageInput').value = '';
+            chatbotModal.show();
+        }
+        
+        // Send message to chatbot
+        async function sendMessage() {
+            if (!currentChatbotId) {
+                alert('No chatbot selected');
+                return;
+            }
+            
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            const model = document.getElementById('modelSelect').value;
+            
+            if (!message) return;
+            
+            try {
+                // Add user message to chat
+                appendMessage('user', message);
+                messageInput.value = '';
+                
+                // Show typing indicator
+                const chatMessages = document.getElementById('chatMessages');
+                const typingDiv = document.createElement('div');
+                typingDiv.className = 'chat-message bot-typing';
+                typingDiv.style.backgroundColor = '#f0f0f0';
+                typingDiv.style.padding = '10px 15px';
+                typingDiv.style.borderRadius = '10px';
+                typingDiv.style.marginBottom = '10px';
+                typingDiv.style.width = 'fit-content';
+                typingDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+                chatMessages.appendChild(typingDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                // Send request to server
+                const response = await fetch(`/chatbot/${currentChatbotId}/ask`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: message, model: model })
+                });
+                
+                // Remove typing indicator
+                if (typingDiv.parentNode) {
+                    typingDiv.parentNode.removeChild(typingDiv);
+                }
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    appendMessage('bot', data.response);
+                } else {
+                    const errorData = await response.json();
+                    appendMessage('bot', `Error: ${errorData.detail || 'Something went wrong'}`);
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                
+                // Remove typing indicator if it's still there
+                const typingDiv = document.querySelector('.bot-typing');
+                if (typingDiv && typingDiv.parentNode) {
+                    typingDiv.parentNode.removeChild(typingDiv);
+                }
+                
+                appendMessage('bot', 'Sorry, there was an error processing your request.');
+            }
+        }
+        
+        // Append a message to the chat
+        function appendMessage(type, content) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${type}-message`;
+            messageDiv.style.padding = '10px 15px';
+            messageDiv.style.borderRadius = '10px';
+            messageDiv.style.marginBottom = '10px';
+            messageDiv.style.maxWidth = '70%';
+            
+            if (type === 'user') {
+                messageDiv.style.backgroundColor = '#4e73df';
+                messageDiv.style.color = 'white';
+                messageDiv.style.marginLeft = 'auto';
+            } else {
+                messageDiv.style.backgroundColor = 'white';
+                messageDiv.style.border = '1px solid #e0e0e0';
+            }
+            
+            // Format content for bot messages
+            if (type === 'bot') {
+                content = content
+                    .replace(/\n\n/g, '<br/><br/>')
+                    .replace(/\n/g, '<br/>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/`(.*?)`/g, '<code>$1</code>');
+                
+                // Handle bullet lists
+                const bulletRegex = /(^|\n)[-*]\s+(.*?)(?=(\n[-*]|\n\n|$))/g;
+                if (content.match(bulletRegex)) {
+                    content = content.replace(bulletRegex, function(match, p1, p2) {
+                        return `${p1}<ul><li>${p2}</li></ul>`;
+                    });
+                    content = content.replace(/<\/ul>\s*<ul>/g, '');
+                }
+                
+                messageDiv.innerHTML = content;
+            } else {
+                messageDiv.textContent = content;
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
     </script>
 </body>
 </html>
