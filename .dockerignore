@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+
+# Environment
+.env
+*.env
+.env.*
+myenv/
+venv/
+env/
+ENV/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local development
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# Data directories (will be mounted as volumes)
+uploaded_files/
+chat_history/
+data/
+
+# Other
+node_modules/
+.qodo
+.ipynb_checkpoints/ 

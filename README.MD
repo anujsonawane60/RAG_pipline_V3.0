@@ -35,6 +35,8 @@ This project implements a Retrieval-Augmented Generation (RAG) chatbot platform 
 
 ## Installation
 
+### Local Installation
+
 1.  Clone the repository:
     ```bash
     git clone https://github.com/anujsonawane60/RAG_Pipeline_V3.git
@@ -70,6 +72,27 @@ JWT_SECRET_KEY=your_secret_key_for_jwt
 ```bash
 uvicorn main:app --reload
 ```
+
+### Docker Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/anujsonawane60/RAG_Pipeline_V3.git
+   ```
+
+2. Navigate to the project directory:
+   ```bash
+   cd your-repo-name
+   ```
+
+3. Create a `.env` file with your API keys as shown above.
+
+4. Build and run the Docker container:
+   ```bash
+   docker-compose up -d
+   ```
+
+5. The application will be available at http://localhost:8000
 
 ## Usage
 1. Go to http://127.0.0.1:8000/
