@@ -799,6 +799,11 @@ async def root():
     with open("static/index.html", "r") as f:
         return f.read()
 
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_dashboard():
+    with open("static/admin.html", "r") as f:
+        return f.read()
+
 @app.get("/chatbots")
 async def list_chatbots(current_user: User = Depends(get_current_active_user)):
     try:

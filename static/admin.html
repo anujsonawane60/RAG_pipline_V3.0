@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e3e6f0;
+        }
+        .table {
+            margin-bottom: 0;
+        }
+        .btn-circle {
+            width: 30px;
+            height: 30px;
+            padding: 6px 0;
+            border-radius: 15px;
+            text-align: center;
+            font-size: 12px;
+            line-height: 1.428571429;
+        }
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+        #alert-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#"><i class="fas fa-tachometer-alt me-2"></i>Admin Dashboard</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#"><i class="fas fa-robot me-1"></i>Chatbots</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#"><i class="fas fa-users me-1"></i>Users</a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/static/chatbot.html"><i class="fas fa-comment-dots me-1"></i>Chatbot Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="logout-btn"><i class="fas fa-sign-out-alt me-1"></i>Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid py-4">
+        <div id="alert-container"></div>
+
+        <!-- Admin Content -->
+        <div id="admin-content" class="d-none">
+            <!-- Chatbots Section -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header py-3">
+                            <h5 class="mb-0"><i class="fas fa-robot me-2"></i>All Chatbots</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle" id="chatbotsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Name</th>
+                                            <th>Created By</th>
+                                            <th>Date</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="chatbotsList">
+                                        <!-- Chatbots will be listed here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="chatbotsLoading" class="loading-spinner">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            <div id="noChatbotsMessage" class="text-center py-4 d-none">
+                                <p class="text-muted">No chatbots found in the system.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Auth Check Loading Spinner -->
+        <div id="auth-check-loading" class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Unauthorized Message -->
+        <div id="unauthorized-message" class="d-none">
+            <div class="alert alert-danger text-center" role="alert">
+                <h4 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Unauthorized Access</h4>
+                <p>You do not have admin privileges to access this dashboard.</p>
+                <hr>
+                <p class="mb-0">Please <a href="/static/chatbot.html" class="alert-link">return to the chatbot page</a> or contact your administrator.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmationModalTitle">Confirm Action</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="confirmationModalBody">
+                    Are you sure you want to perform this action?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmActionBtn">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Initialize variables
+        let confirmActionCallback = null;
+        const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+
+        // Function to check if user is authenticated and has admin privileges
+        async function checkAuth() {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    redirectToLogin();
+                    return;
+                }
+
+                const response = await fetch('/users/me', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    redirectToLogin();
+                    return;
+                }
+
+                const userData = await response.json();
+                
+                // Check if user is host/admin
+                if (userData.is_host) {
+                    document.getElementById('auth-check-loading').classList.add('d-none');
+                    document.getElementById('admin-content').classList.remove('d-none');
+                    loadChatbots();
+                } else {
+                    // Show unauthorized message
+                    document.getElementById('auth-check-loading').classList.add('d-none');
+                    document.getElementById('unauthorized-message').classList.remove('d-none');
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                redirectToLogin();
+            }
+        }
+
+        // Function to redirect to login page
+        function redirectToLogin() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('token_type');
+            localStorage.removeItem('username');
+            window.location.href = '/static/auth.html';
+        }
+
+        // Function to fetch and display all chatbots
+        async function loadChatbots() {
+            try {
+                document.getElementById('chatbotsLoading').classList.remove('d-none');
+                document.getElementById('chatbotsList').innerHTML = '';
+                document.getElementById('noChatbotsMessage').classList.add('d-none');
+
+                const response = await fetchWithAuthRetry('/chatbots');
+                
+                document.getElementById('chatbotsLoading').classList.add('d-none');
+                
+                if (!response || !response.ok) {
+                    throw new Error(`Error fetching chatbots: ${response ? response.status : 'No response'}`);
+                }
+                
+                const data = await response.json();
+                const chatbotsList = document.getElementById('chatbotsList');
+
+                if (data.chatbots.length === 0) {
+                    document.getElementById('noChatbotsMessage').classList.remove('d-none');
+                    return;
+                }
+
+                data.chatbots.forEach(chatbot => {
+                    const row = document.createElement('tr');
+                    
+                    // Format date if available
+                    const chatbotDate = chatbot.date && chatbot.date !== 'Unknown' 
+                        ? new Date(chatbot.date).toLocaleString() 
+                        : 'Unknown';
+                    
+                    row.innerHTML = `
+                        <td><small class="text-muted">${chatbot.id}</small></td>
+                        <td><strong>${chatbot.name}</strong></td>
+                        <td>${chatbot.user_id || 'System'}</td>
+                        <td>${chatbotDate}</td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-primary view-chatbot" data-id="${chatbot.id}" data-name="${chatbot.name}">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger delete-chatbot" data-id="${chatbot.id}" data-name="${chatbot.name}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    
+                    chatbotsList.appendChild(row);
+                });
+
+                // Add event listeners to action buttons
+                document.querySelectorAll('.view-chatbot').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const chatbotId = btn.getAttribute('data-id');
+                        window.location.href = `/static/chatbot.html?id=${chatbotId}`;
+                    });
+                });
+
+                document.querySelectorAll('.delete-chatbot').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const chatbotId = btn.getAttribute('data-id');
+                        const chatbotName = btn.getAttribute('data-name');
+                        confirmDeleteChatbot(chatbotId, chatbotName);
+                    });
+                });
+            } catch (error) {
+                console.error('Error loading chatbots:', error);
+                showAlert('Error loading chatbots. Please try refreshing the page.', 'danger');
+                document.getElementById('chatbotsLoading').classList.add('d-none');
+            }
+        }
+
+        // Function to confirm chatbot deletion
+        function confirmDeleteChatbot(chatbotId, chatbotName) {
+            document.getElementById('confirmationModalTitle').innerText = 'Delete Chatbot';
+            document.getElementById('confirmationModalBody').innerText = `Are you sure you want to delete the chatbot "${chatbotName}"?`;
+            
+            confirmActionCallback = async () => {
+                try {
+                    const response = await fetchWithAuthRetry(`/chatbot/${chatbotId}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (response.ok) {
+                        showAlert(`Chatbot "${chatbotName}" deleted successfully`, 'success');
+                        loadChatbots();
+                    } else {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Failed to delete chatbot');
+                    }
+                } catch (error) {
+                    console.error('Error deleting chatbot:', error);
+                    showAlert(`Error deleting chatbot: ${error.message}`, 'danger');
+                }
+                confirmationModal.hide();
+            };
+
+            confirmationModal.show();
+        }
+
+        // Function to fetch with authentication retry
+        async function fetchWithAuthRetry(url, options = {}) {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                redirectToLogin();
+                return null;
+            }
+
+            // Add authorization header
+            const headers = {
+                ...options.headers,
+                'Authorization': `Bearer ${token}`
+            };
+
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers
+                });
+
+                // If unauthorized, try to redirect to login
+                if (response.status === 401) {
+                    redirectToLogin();
+                    return null;
+                }
+
+                return response;
+            } catch (error) {
+                console.error('Fetch error:', error);
+                return null;
+            }
+        }
+
+        // Function to show alerts
+        function showAlert(message, type = 'danger') {
+            const alertContainer = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            alertContainer.appendChild(alert);
+
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                alert.classList.remove('show');
+                setTimeout(() => alert.remove(), 150);
+            }, 5000);
+        }
+
+        // Add event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check authentication
+            checkAuth();
+
+            // Confirmation modal action
+            document.getElementById('confirmActionBtn').addEventListener('click', function() {
+                if (typeof confirmActionCallback === 'function') {
+                    confirmActionCallback();
+                }
+            });
+
+            // Logout button
+            document.getElementById('logout-btn').addEventListener('click', function(event) {
+                event.preventDefault();
+                redirectToLogin();
+            });
+        });
+    </script>
+</body>
+</html> 

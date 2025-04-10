@@ -251,6 +251,11 @@
                     <li class="nav-item">
                         <span class="nav-link" id="userDisplay"></span>
                     </li>
+                    <li class="nav-item d-none" id="admin-dashboard-link">
+                        <a class="nav-link" href="/static/admin.html">
+                            <i class="fas fa-tachometer-alt me-1"></i>Admin Dashboard
+                        </a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#" id="logoutBtn">Logout</a>
                     </li>
@@ -922,6 +927,11 @@
                     
                     // Display username
                     document.getElementById('userDisplay').textContent = `Welcome, ${user.username}`;
+                    
+                    // Show admin dashboard link if user is host
+                    if (user.is_host) {
+                        document.getElementById('admin-dashboard-link').classList.remove('d-none');
+                    }
                     
                     // Show main content
                     document.getElementById('auth-warning').classList.add('d-none');
