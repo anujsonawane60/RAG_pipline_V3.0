@@ -1,12 +1,13 @@
 import os
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Depends, status
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import cohere
 import pinecone
-from pinecone import ServerlessSpec
+from pinecone import Pinecone, ServerlessSpec
 import uvicorn
 import PyPDF2
 import io
@@ -16,18 +17,197 @@ import tempfile
 import shutil
 import time
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 import json
 import openai
 import together
 import requests
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 import sys
+from passlib.context import CryptContext
+from jose import JWTError, jwt
 import uuid
-import asyncio
 
 # Load environment variables
 load_dotenv()
+
+# JWT Settings
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# Password context for hashing - with backup option if bcrypt fails
+try:
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    # Test bcrypt is working correctly
+    test_hash = pwd_context.hash("test_password")
+    pwd_context.verify("test_password", test_hash)
+except Exception as e:
+    print(f"Warning: bcrypt error - {str(e)}. Using fallback scheme")
+    # Use sha256_crypt as fallback if bcrypt has issues
+    pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
+
+# OAuth2 bearer token
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# Define User models
+class User(BaseModel):
+    username: str
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    disabled: Optional[bool] = None
+    is_host: Optional[bool] = False
+
+class UserInDB(User):
+    hashed_password: str
+
+class UserCreate(BaseModel):
+    username: str
+    email: str
+    password: str
+    full_name: Optional[str] = None
+    # Admin role is only set via hardcoded credentials
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+    is_host: Optional[bool] = False
+
+# Host admin credentials (hardcoded as requested)
+HOST_USERNAME = "host_admin"
+HOST_PASSWORD = "admin123"  # In production, use a strong password
+
+# In-memory user database (replace with a real database in production)
+users_db = {}
+
+# Function to verify password
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+# Function to get password hash
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+# Create access token
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# Get user from database
+def get_user(username: str):
+    print(f"Looking up user in database: {username}")
+    return user_manager.get_user(username)
+
+# Authenticate user
+def authenticate_user(username: str, password: str):
+    print(f"Authenticating user: {username}")
+    return user_manager.authenticate_user(username, password)
+
+# Get current user from token
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        # Basic token format validation
+        if not token or len(token) < 10:
+            print("Token is missing or too short")
+            raise credentials_exception
+            
+        # Print token for debugging (remove in production)
+        token_prefix = token[:15] if len(token) >= 15 else token
+        print(f"Validating token: {token_prefix}...")
+        
+        # Try to decode token
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            print(f"Token payload: {payload}")
+        except jwt.ExpiredSignatureError:
+            print("Token has expired")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except jwt.JWTError as e:
+            print(f"JWT Error: {str(e)}")
+            raise credentials_exception
+        except Exception as e:
+            print(f"Unexpected error decoding token: {str(e)}")
+            raise credentials_exception
+            
+        # Extract username from token payload
+        username: str = payload.get("sub")
+        if username is None:
+            print("Username missing from token")
+            raise credentials_exception
+        
+        # Extract is_host from token payload
+        is_host = payload.get("is_host", False)
+        token_data = TokenData(username=username, is_host=is_host)
+        
+        print(f"Token validated for user: {username}, is_host: {is_host}")
+    except Exception as e:
+        print(f"Authentication error: {str(e)}")
+        raise credentials_exception
+    
+    # Get user from token data
+    try:
+        # Special case for host admin
+        if token_data.username == HOST_USERNAME:
+            print(f"Creating host admin user object")
+            user = UserInDB(
+                username=HOST_USERNAME,
+                hashed_password=get_password_hash(HOST_PASSWORD),
+                is_host=True,
+                email="admin@example.com"
+            )
+        else:
+            # Get regular user from database
+            print(f"Looking up user in database: {token_data.username}")
+            user = get_user(username=token_data.username)
+        
+        if user is None:
+            print(f"User not found: {token_data.username}")
+            raise credentials_exception
+        
+        # Convert from UserInDB to User to avoid serializing hashed password
+        return User(
+            username=user.username,
+            email=user.email,
+            full_name=user.full_name,
+            disabled=user.disabled,
+            is_host=user.is_host or token_data.is_host
+        )
+    except Exception as e:
+        print(f"User lookup error: {str(e)}")
+        raise credentials_exception
+
+# Get current active user
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+# Verify if user is host admin
+async def get_host_admin(current_user: User = Depends(get_current_user)):
+    if not current_user.is_host and current_user.username != HOST_USERNAME:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized as host admin"
+        )
+    return current_user
 
 app = FastAPI(title="Multi-RAG Chatbot API")
 
@@ -41,8 +221,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*", "Authorization", "Content-Type"],
+    expose_headers=["*"]
 )
 
 # Mount static files
@@ -77,66 +258,95 @@ class QueryRequest(BaseModel):
 
 class ServiceManager:
     def __init__(self):
-        self.cohere_client = None
+        # Initialize cohere client
+        self.co = None
         self.pc = None
         self.index = None
-
+        self.active_index_name = None
+        self.retry_attempts = 3
+        
     def initialize_services(self, index_name: str):
+        """Initialize Cohere and Pinecone services."""
         try:
-            # Initialize Cohere
-            if not Config.COHERE_API_KEY:
-                raise ValueError("COHERE_API_KEY not found in environment variables")
-            self.cohere_client = cohere.Client(Config.COHERE_API_KEY)
-
-            # Initialize Pinecone
-            if not Config.PINECONE_API_KEY:
-                raise ValueError("PINECONE_API_KEY not found in environment variables")
-            
             print("Initializing Pinecone...")
+            
+            if not Config.PINECONE_API_KEY:
+                raise Exception("Pinecone API key is missing")
+            
+            if not Config.COHERE_API_KEY:
+                raise Exception("Cohere API key is missing")
+                
             # Initialize Pinecone client
-            self.pc = pinecone.Pinecone(api_key=Config.PINECONE_API_KEY)
-
-            try:
-                # List existing indexes
-                existing_indexes = [index.name for index in self.pc.list_indexes()]
-                print(f"Existing indexes: {existing_indexes}")
-
-                # Check if index exists and create if it doesn't
-                if index_name not in existing_indexes:
-                    print(f"Creating new serverless index: {index_name}")
-                    # Create index with serverless specification
-                    self.pc.create_index(
-                        name=index_name,
-                        dimension=Config.DIMENSION,
-                        metric='cosine',
-                        spec={
-                            "serverless": {
-                                "cloud": Config.PINECONE_CLOUD,
-                                "region": Config.PINECONE_REGION
-                            }
-                        }
-                    )
-                    print(f"Waiting for index {index_name} to be ready...")
-                    # Wait for index to be ready
-                    time.sleep(20)
-                else:
-                    print(f"Index {index_name} already exists")
-
-                # Initialize index
-                print(f"Connecting to index: {index_name}")
-                self.index = self.pc.Index(index_name)
-
-                # Verify index is accessible
-                stats = self.index.describe_index_stats()
-                print(f"Successfully connected to index. Stats: {stats}")
-
-            except Exception as e:
-                print(f"Error during index operations: {str(e)}")
-                raise
-
+            self.pc = Pinecone(api_key=Config.PINECONE_API_KEY)
+            
+            # Get list of existing indexes
+            indexes = self.pc.list_indexes()
+            print(f"Existing indexes: {[idx['name'] for idx in indexes]}")
+            
+            # Clean index name - ensure it follows Pinecone's rules
+            # Only lowercase letters, numbers and hyphens, max 45 chars
+            safe_index_name = re.sub(r'[^a-z0-9-]', '-', index_name.lower())
+            
+            # Truncate if too long
+            if len(safe_index_name) > 45:
+                safe_index_name = safe_index_name[:45]
+                
+            print(f"Using safe index name: {safe_index_name}")
+            
+            # Check if index already exists
+            index_exists = False
+            for idx in indexes:
+                if idx['name'] == safe_index_name:
+                    index_exists = True
+                    print(f"Index {safe_index_name} already exists")
+                    break
+            
+            # Create new index if it doesn't exist
+            if not index_exists:
+                print(f"Creating new serverless index: {safe_index_name}")
+                try:
+                    # Create index with retry logic
+                    for attempt in range(self.retry_attempts):
+                        try:
+                            self.pc.create_index(
+                                name=safe_index_name,
+                                dimension=Config.DIMENSION,
+                                metric="cosine",
+                                spec=ServerlessSpec(
+                                    cloud=Config.PINECONE_CLOUD,
+                                    region=Config.PINECONE_REGION
+                                )
+                            )
+                            # Wait for index to be ready
+                            time.sleep(5)
+                            break
+                        except Exception as e:
+                            if attempt < self.retry_attempts - 1:
+                                print(f"Attempt {attempt+1} failed, retrying: {str(e)}")
+                                time.sleep(2)
+                            else:
+                                raise
+                except Exception as e:
+                    print(f"Error during index operations: {str(e)}")
+                    raise Exception(f"Failed to create index: {str(e)}")
+            
+            # Connect to the index
+            print(f"Connecting to index: {safe_index_name}")
+            self.index = self.pc.Index(safe_index_name)
+            self.active_index_name = safe_index_name
+            
+            # Get index stats to verify connection
+            stats = self.index.describe_index_stats()
+            print(f"Successfully connected to index. Stats: {stats}")
+            
+            # Initialize Cohere client
+            self.co = cohere.Client(Config.COHERE_API_KEY)
+            
+            return True
+            
         except Exception as e:
             print(f"Service initialization error: {str(e)}")
-            raise Exception(f"Service initialization error: {str(e)}")
+            raise
 
     def delete_index(self, index_name: str):
         try:
@@ -194,620 +404,394 @@ class TextProcessor:
         return [chunk for chunk in chunks if chunk.strip()]
 
 class ChatbotManager:
-    def __init__(self):
+    def __init__(self, file_path="data/chatbots.json"):
         self.chatbots = {}
-        self.base_upload_dir = "uploaded_files"
-        self.chat_history_dir = "chat_history"
-        os.makedirs(self.base_upload_dir, exist_ok=True)
-        os.makedirs(self.chat_history_dir, exist_ok=True)
-        self.load_existing_chatbots()
-
-    def load_existing_chatbots(self):
-        if os.path.exists(self.base_upload_dir):
-            for chatbot_name in os.listdir(self.base_upload_dir):
-                if os.path.isdir(os.path.join(self.base_upload_dir, chatbot_name)):
-                    self.initialize_existing_chatbot(chatbot_name)
-
-    def initialize_existing_chatbot(self, chatbot_name: str):
-        index_name = f"rag-chatbot-{chatbot_name.lower()}"
-        service_manager = ServiceManager()
-        service_manager.initialize_services(index_name)
+        self.file_path = file_path
+        self.service_manager = ServiceManager()
+        self.base_dir = "data"
         
-        chatbot_dir = os.path.join(self.base_upload_dir, chatbot_name)
-        files = os.listdir(chatbot_dir)
+        # Ensure data directory exists
+        os.makedirs(self.base_dir, exist_ok=True)
         
-        self.chatbots[chatbot_name] = {
-            "index_name": index_name,
-            "service_manager": service_manager,
-            "files": files,
-            "created_date": self.get_creation_date(chatbot_dir)
-        }
-
-    def get_creation_date(self, directory: str) -> str:
-        timestamp = os.path.getctime(directory)
-        return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-
-    def create_chatbot(self, chatbot_name: str):
+        # Load existing chatbots if any
+        self.load_chatbots()
+    
+    def load_chatbots(self):
+        """Load chatbots from JSON file"""
         try:
-            if not chatbot_name or not re.match("^[a-zA-Z0-9-_]+$", chatbot_name):
-                raise HTTPException(400, "Invalid chatbot name. Use only letters, numbers, hyphens and underscores")
-
-            if chatbot_name in self.chatbots:
-                raise HTTPException(400, "Chatbot with this name already exists")
-
-            chatbot_dir = os.path.join(self.base_upload_dir, chatbot_name)
-            os.makedirs(chatbot_dir, exist_ok=True)
-
-            # Create a unique index name for this chatbot
-            index_name = f"rag-chatbot-{chatbot_name.lower()}-{int(time.time())}"[:62]
-            service_manager = ServiceManager()
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
             
-            try:
-                print(f"Initializing services for chatbot: {chatbot_name}")
-                service_manager.initialize_services(index_name)
-                print(f"Services initialized successfully for chatbot: {chatbot_name}")
-            except Exception as e:
-                print(f"Error initializing services: {str(e)}")
-                if os.path.exists(chatbot_dir):
-                    shutil.rmtree(chatbot_dir)
-                raise HTTPException(500, f"Failed to initialize services: {str(e)}")
-
-            self.chatbots[chatbot_name] = {
-                "index_name": index_name,
-                "service_manager": service_manager,
-                "files": [],
-                "created_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-
-            return {
-                "status": "success",
-                "message": f"Chatbot '{chatbot_name}' created successfully with serverless index",
-                "name": chatbot_name,
-                "index_name": index_name
-            }
+            if os.path.exists(self.file_path):
+                with open(self.file_path, 'r') as f:
+                    self.chatbots = json.load(f)
+                print(f"Loaded {len(self.chatbots)} chatbots from {self.file_path}")
+            else:
+                # Create empty chatbots file
+                self.save_chatbots()
+                print(f"Created new chatbots file at {self.file_path}")
         except Exception as e:
-            print(f"Error creating chatbot: {str(e)}")
-            chatbot_dir = os.path.join(self.base_upload_dir, chatbot_name)
+            print(f"Error loading chatbots: {str(e)}")
+            self.chatbots = {}
+    
+    def save_chatbots(self):
+        """Save chatbots to JSON file"""
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+            
+            with open(self.file_path, 'w') as f:
+                json.dump(self.chatbots, f, indent=2)
+            print(f"Saved {len(self.chatbots)} chatbots to {self.file_path}")
+            return True
+        except Exception as e:
+            print(f"Error saving chatbots: {str(e)}")
+            return False
+
+    def create_chatbot(self, chatbot_name: str, user_id: str = None):
+        print(f"Creating chatbot: {chatbot_name} for user: {user_id}")
+        
+        # Validate chatbot name
+        if not re.match(r'^[a-zA-Z0-9-]+$', chatbot_name):
+            raise ValueError("Chatbot name must only contain alphanumeric characters or hyphens")
+        
+        # Create a unique identifier
+        timestamp = int(time.time())
+        
+        # Create a directory structure for the chatbot
+        chatbot_id = f"{user_id}-{chatbot_name}" if user_id else chatbot_name
+        
+        # Check if chatbot with this ID already exists
+        if chatbot_id in self.chatbots:
+            raise ValueError(f"A chatbot with name '{chatbot_name}' already exists")
+        
+        # Ensure valid Pinecone index name - lowercase, no underscores, max 45 chars
+        pinecone_index_name = f"rag-chatbot-{chatbot_id.lower().replace('_', '-')}-{timestamp}"
+        
+        # Trim index name if too long (Pinecone has a 45 character limit)
+        if len(pinecone_index_name) > 45:
+            # Keep timestamp and prefix, trim the middle part
+            max_id_length = 45 - len(f"rag-chatbot--{timestamp}")
+            trimmed_id = chatbot_id.lower().replace('_', '-')[:max_id_length]
+            pinecone_index_name = f"rag-chatbot-{trimmed_id}-{timestamp}"
+        
+        print(f"Using Pinecone index name: {pinecone_index_name}")
+        
+        # Create data directories
+        os.makedirs(f"data/{chatbot_id}", exist_ok=True)
+        os.makedirs(f"data/{chatbot_id}/documents", exist_ok=True)
+        os.makedirs(f"data/{chatbot_id}/chat_history", exist_ok=True)
+        
+        # Create an empty chat history file
+        with open(f"data/{chatbot_id}/chat_history/history.json", 'w') as f:
+            json.dump([], f)
+        
+        # Initialize services for this chatbot
+        try:
+            self.service_manager.initialize_services(pinecone_index_name)
+        except Exception as e:
+            print(f"Error initializing services: {str(e)}")
+            # Clean up directories if initialization fails
+            if os.path.exists(f"data/{chatbot_id}"):
+                shutil.rmtree(f"data/{chatbot_id}")
+            raise ValueError(f"Error initializing services: {str(e)}")
+        
+        # Add to chatbots dictionary
+        self.chatbots[chatbot_id] = {
+            "name": chatbot_name,
+            "creation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "files": [],
+            "index_name": pinecone_index_name,
+            "user_id": user_id
+        }
+        
+        # Save to file
+        self.save_chatbots()
+        
+        return {
+            "status": "success",
+            "message": f"Chatbot '{chatbot_name}' created successfully",
+            "chatbot_id": chatbot_id,
+            "index_name": pinecone_index_name
+        }
+        
+    def delete_chatbot(self, chatbot_id: str):
+        """Delete a chatbot and its resources"""
+        try:
+            if chatbot_id not in self.chatbots:
+                raise ValueError(f"Chatbot {chatbot_id} not found")
+            
+            # Get index name
+            index_name = self.chatbots[chatbot_id].get("index_name")
+            
+            # Delete index if it exists
+            if index_name:
+                try:
+                    self.service_manager.delete_index(index_name)
+                except Exception as e:
+                    print(f"Warning: Could not delete index {index_name}: {str(e)}")
+            
+            # Delete local files
+            chatbot_dir = os.path.join(self.base_dir, chatbot_id)
             if os.path.exists(chatbot_dir):
                 shutil.rmtree(chatbot_dir)
-            if chatbot_name in self.chatbots:
-                del self.chatbots[chatbot_name]
-            raise HTTPException(500, f"Error creating chatbot: {str(e)}")
-
-    def delete_chatbot(self, chatbot_name: str):
-        if chatbot_name not in self.chatbots:
-            raise HTTPException(404, "Chatbot not found")
-
-        service_manager = self.chatbots[chatbot_name]["service_manager"]
-        index_name = self.chatbots[chatbot_name]["index_name"]
+            
+            # Remove from dictionary
+            del self.chatbots[chatbot_id]
+            
+            # Save changes to file
+            self.save_chatbots()
+            
+            return {"status": "success", "message": f"Chatbot {chatbot_id} deleted successfully"}
+        except Exception as e:
+            print(f"Error deleting chatbot: {str(e)}")
+            raise ValueError(f"Failed to delete chatbot: {str(e)}")
+            
+    def add_file_to_chatbot(self, chatbot_id: str, filename: str):
+        """Add a file reference to a chatbot"""
+        if chatbot_id not in self.chatbots:
+            raise ValueError(f"Chatbot {chatbot_id} not found")
+            
+        if filename not in self.chatbots[chatbot_id]["files"]:
+            self.chatbots[chatbot_id]["files"].append(filename)
+            
+        # Save changes to file
+        self.save_chatbots()
         
-        # Delete the index
-        service_manager.delete_index(index_name)
+        return True
 
-        chatbot_dir = os.path.join(self.base_upload_dir, chatbot_name)
-        if os.path.exists(chatbot_dir):
-            shutil.rmtree(chatbot_dir)
+    def get_user_chatbots(self, user_id: str) -> List[Dict]:
+        """Get chatbots for a specific user"""
+        user_chatbots = []
+        
+        try:
+            for chatbot_id, chatbot_info in self.chatbots.items():
+                if chatbot_info.get('user_id') == user_id:
+                    # Ensure consistent date field name
+                    creation_date = chatbot_info.get('creation_date') or chatbot_info.get('created_date', 'Unknown')
+                    
+                    user_chatbots.append({
+                        'id': chatbot_id,
+                        'name': chatbot_info.get('name', chatbot_id.split('-')[-1]),
+                        'files': chatbot_info.get('files', []),
+                        'date': creation_date
+                    })
+            return user_chatbots
+        except Exception as e:
+            print(f"Error getting user chatbots: {str(e)}")
+            return []
 
-        history_file = os.path.join(self.chat_history_dir, f"{chatbot_name}.json")
-        if os.path.exists(history_file):
-            os.remove(history_file)
-
-        del self.chatbots[chatbot_name]
-
-        return {"status": "success", "message": f"Chatbot '{chatbot_name}' deleted"}
-
-    def get_chatbot_info(self, chatbot_name: str) -> Dict:
-        if chatbot_name not in self.chatbots:
-            raise HTTPException(404, "Chatbot not found")
-
+    def get_all_chatbots(self) -> List[Dict]:
+        """Get all chatbots (for admin)"""
+        all_chatbots = []
+        
+        try:
+            for chatbot_id, chatbot_info in self.chatbots.items():
+                # Ensure consistent date field name
+                creation_date = chatbot_info.get('creation_date') or chatbot_info.get('created_date', 'Unknown')
+                
+                all_chatbots.append({
+                    'id': chatbot_id,
+                    'name': chatbot_info.get('name', chatbot_id.split('-')[-1]),
+                    'files': chatbot_info.get('files', []),
+                    'date': creation_date,
+                    'user_id': chatbot_info.get('user_id', 'Unknown')
+                })
+            return all_chatbots
+        except Exception as e:
+            print(f"Error getting all chatbots: {str(e)}")
+            return []
+            
+    def get_chatbot_info(self, chatbot_id: str) -> Dict:
+        """Get information about a specific chatbot"""
+        if chatbot_id not in self.chatbots:
+            raise ValueError(f"Chatbot {chatbot_id} not found")
+            
+        chatbot_info = self.chatbots[chatbot_id]
+        
         return {
-            "name": chatbot_name,
-            "files": self.chatbots[chatbot_name]["files"],
-            "created_date": self.chatbots[chatbot_name]["created_date"]
+            'id': chatbot_id,
+            'name': chatbot_info.get('name', chatbot_id.split('-')[-1]),
+            'files': chatbot_info.get('files', []),
+            'date': chatbot_info.get('creation_date', 'Unknown'),
+            'user_id': chatbot_info.get('user_id', 'Unknown'),
+            'index_name': chatbot_info.get('index_name', 'Unknown')
         }
-
-    def save_chat_history(self, chatbot_name: str, query: str, answer: str):
-        history_file = os.path.join(self.chat_history_dir, f"{chatbot_name}.json")
         
+    def save_chat_history(self, chatbot_id: str, query: str, answer: str):
+        """Save a chat interaction to the chatbot's history"""
+        if chatbot_id not in self.chatbots:
+            raise ValueError(f"Chatbot {chatbot_id} not found")
+            
+        # Make sure the history directory exists
+        history_dir = f"data/{chatbot_id}/chat_history"
+        os.makedirs(history_dir, exist_ok=True)
+        
+        # Load existing history
+        history_file = f"{history_dir}/history.json"
         history = []
-        if os.path.exists(history_file):
-            with open(history_file, 'r') as f:
-                history = json.load(f)
         
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r') as f:
+                    history = json.load(f)
+            except Exception as e:
+                print(f"Error loading chat history: {str(e)}")
+        
+        # Add new interaction
         history.append({
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "query": query,
             "answer": answer
         })
         
-        with open(history_file, 'w') as f:
-            json.dump(history, f)
-
-    def get_chat_history(self, chatbot_name: str) -> List[Dict]:
-        history_file = os.path.join(self.chat_history_dir, f"{chatbot_name}.json")
+        # Save updated history
+        try:
+            with open(history_file, 'w') as f:
+                json.dump(history, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error saving chat history: {str(e)}")
+            return False
+            
+    def get_chat_history(self, chatbot_id: str) -> List[Dict]:
+        """Get chat history for a specific chatbot"""
+        if chatbot_id not in self.chatbots:
+            raise ValueError(f"Chatbot {chatbot_id} not found")
+            
+        history_file = f"data/{chatbot_id}/chat_history/history.json"
+        
         if os.path.exists(history_file):
-            with open(history_file, 'r') as f:
-                return json.load(f)
+            try:
+                with open(history_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error reading chat history: {str(e)}")
+        
         return []
 
-    async def upload_file(self, chatbot_id: str, filename: str, file_content: bytes) -> bool:
-        """Upload and process a file for a specific chatbot"""
+class UserManager:
+    def __init__(self, file_path="data/users.json"):
+        self.file_path = file_path
+        self.users = {}
+        self.load_users()
+        
+    def load_users(self):
+        """Load users from JSON file"""
         try:
-            if chatbot_id not in self.chatbots:
-                return False
-
-            # Create directory if it doesn't exist
-            chatbot_dir = os.path.join(self.base_upload_dir, chatbot_id)
-            os.makedirs(chatbot_dir, exist_ok=True)
-
-            # Validate file size
-            max_size = 10 * 1024 * 1024  # 10MB
-            if len(file_content) > max_size:
-                return False
-
-            # Validate file type
-            file_extension = filename.lower().split('.')[-1]
-            if file_extension not in ['pdf', 'docx', 'txt']:
-                return False
-
-            # Save file
-            file_path = os.path.join(chatbot_dir, filename)
-            with open(file_path, "wb") as buffer:
-                buffer.write(file_content)
-
-            # Process file content
-            if file_extension == 'pdf':
-                text = TextProcessor.extract_text_from_pdf(file_content)
-            elif file_extension == 'docx':
-                text = TextProcessor.extract_text_from_docx(file_content)
-            else:  # txt file
-                text = file_content.decode('utf-8')
-
-            if not text:
-                os.remove(file_path)
-                return False
-
-            # Process chunks
-            chunks = TextProcessor.chunk_text(text)
-            service_manager = self.chatbots[chatbot_id]["service_manager"]
-
-            print(f"Processing {len(chunks)} chunks for file: {filename}")
-            vectors_to_upsert = []
-
-            # Process in batches of 10 chunks
-            BATCH_SIZE = 10
-            for i in range(0, len(chunks), BATCH_SIZE):
-                batch_chunks = chunks[i:i+BATCH_SIZE]
-                filtered_chunks = [chunk for chunk in batch_chunks if chunk.strip()]
-                
-                if filtered_chunks:
-                    # Get embeddings for batch
-                    response = service_manager.cohere_client.embed(
-                        texts=filtered_chunks,
-                        model='embed-english-v3.0',
-                        input_type="search_document"
-                    )
-                    
-                    # Process batch results
-                    for j, embedding in enumerate(response.embeddings):
-                        chunk_index = i + j
-                        if chunk_index < len(chunks):  # Safety check
-                            vectors_to_upsert.append({
-                                'id': f'{chatbot_id}_chunk_{chunk_index}_{os.urandom(4).hex()}',
-                                'values': embedding,
-                                'metadata': {
-                                    'text': filtered_chunks[j],
-                                    'file_name': filename,
-                                    'chatbot': chatbot_id
-                                }
-                            })
-                    
-                    # Add rate limiting delay - stay under 40 calls per minute
-                    await asyncio.sleep(1.5)  # 1.5 seconds delay
-
-            if vectors_to_upsert:
-                # Upsert vectors in batches to avoid overwhelming Pinecone
-                UPSERT_BATCH_SIZE = 100
-                for i in range(0, len(vectors_to_upsert), UPSERT_BATCH_SIZE):
-                    batch = vectors_to_upsert[i:i+UPSERT_BATCH_SIZE]
-                    service_manager.index.upsert(vectors=batch)
-                    print(f"Upserted batch {i//UPSERT_BATCH_SIZE + 1} of {len(vectors_to_upsert)//UPSERT_BATCH_SIZE + 1}")
-                    await asyncio.sleep(1)  # Add delay between batches
-
-            # Update chatbot files list
-            if filename not in self.chatbots[chatbot_id]["files"]:
-                self.chatbots[chatbot_id]["files"].append(filename)
-
-            return True
-
-        except Exception as e:
-            print(f"Error uploading file: {str(e)}")
-            return False
-
-    async def process_query(self, chatbot_id: str, query: str, model: str) -> str:
-        """Process a query for a specific chatbot and return the response"""
-        try:
-            if chatbot_id not in self.chatbots:
-                raise Exception(f"Chatbot with ID {chatbot_id} not found")
-                
-            # Get relevant context from vector store
-            service_manager = self.chatbots[chatbot_id]["service_manager"]
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
             
-            # Get query embedding
-            query_embedding = service_manager.cohere_client.embed(
-                texts=[query],
-                model='embed-english-v3.0',
-                input_type="search_query"
-            ).embeddings[0]
-
-            # Search for similar vectors
-            search_results = service_manager.index.query(
-                vector=query_embedding,
-                top_k=3,
-                include_metadata=True,
-                filter={
-                    'chatbot': {'$eq': chatbot_id}
-                }
-            )
-
-            # Extract relevant contexts
-            contexts = [match.metadata['text'] for match in search_results.matches]
-            
-            # Get chat history
-            chat_history = self.get_chat_history(chatbot_id)
-            # Get the last 3 conversations for context
-            recent_history = chat_history[-3:] if len(chat_history) > 3 else chat_history
-            
-            # Prepare prompt with context and chat history
-            system_prompt = """You are a helpful AI assistant. Using the provided context and chat history, 
-            answer the user's question. If you cannot find the answer in the context, 
-            say "I cannot find the answer in the provided context." 
-            Base your answer on both the context and the conversation history provided."""
-
-            # Format chat history for the prompt
-            history_context = ""
-            if recent_history:
-                history_context = "\nPrevious conversation:\n"
-                for entry in recent_history:
-                    history_context += f"User: {entry['query']}\nAssistant: {entry['answer']}\n"
-
-            user_prompt = f"""Context: {' '.join(contexts)}
-{history_context}
-
-Current Question: {query}
-
-Please provide a clear and concise answer based on both the context and conversation history above."""
-
-            answer = ""
-            
-            # Get response from selected model
-            if model.lower() == "openai":
-                OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-                if not OPENAI_API_KEY:
-                    raise Exception("OpenAI API key not configured")
-                
-                client = openai.OpenAI(api_key=OPENAI_API_KEY)
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=0.7,
-                    max_tokens=500,
-                    presence_penalty=0.1,
-                    frequency_penalty=0.1
-                )
-                answer = response.choices[0].message.content
-
-            elif model.lower() == "cohere":
-                COHERE_API_KEY = os.getenv("COHERE_API_KEY")
-                if not COHERE_API_KEY:
-                    raise Exception("Cohere API key not configured")
-                
-                combined_prompt = f"{system_prompt}\n\n{user_prompt}"
-
-                response = service_manager.cohere_client.chat(
-                    message=user_prompt,
-                    model="command",
-                    temperature=0.7,
-                    chat_history=[],
-                    prompt_truncation='AUTO'
-                )
-                answer = response.text
-
-            elif model.lower() == "togetherai":
-                TOGETHERAI_API_KEY = os.getenv("TOGETHERAI_API_KEY")
-                if not TOGETHERAI_API_KEY:
-                    raise Exception("TogetherAI API key not configured")
-                
-                url = "https://api.together.xyz/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {TOGETHERAI_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": "mistralai/Mistral-7B-Instruct-v0.2",
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 500
-                }
-                
-                response = requests.post(url, json=payload, headers=headers)
-                if response.status_code != 200:
-                    raise Exception(f"TogetherAI API error: {response.text}")
-                
-                answer = response.json()["choices"][0]["message"]["content"]
-
+            if os.path.exists(self.file_path):
+                with open(self.file_path, 'r') as f:
+                    self.users = json.load(f)
+                print(f"Loaded {len(self.users)} users from {self.file_path}")
             else:
-                raise Exception(f"Unsupported model: {model}")
-
-            # Save chat history
-            self.save_chat_history(chatbot_id, query, answer)
-            
-            return answer
-            
+                # Create empty users file
+                self.save_users()
+                print(f"Created new users file at {self.file_path}")
         except Exception as e:
-            print(f"Error processing query: {str(e)}")
-            raise Exception(f"Failed to process query: {str(e)}")
-
-# Add new user-related models
-class UserCreate(BaseModel):
-    email: str
-    password: str
-    full_name: Optional[str] = None
-
-class PasswordResetRequest(BaseModel):
-    email: str
-
-class PasswordResetVerify(BaseModel):
-    reset_code: str
-    email: str
-    new_password: str
-
-# Helper function for password hashing
-def get_password_hash(password: str) -> str:
-    # In a real app, use secure hashing like bcrypt
-    # This is a simple placeholder - not secure for production!
-    import hashlib
-    return hashlib.sha256(password.encode()).hexdigest()
-
-# Function to get users data file
-def get_users_file():
-    users_file = "users.json"
-    try:
-        with open(users_file, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        # If file doesn't exist or is invalid, create empty users dict
-        return {"users": []}
-
-# Function to save users data
-def save_users_data(users_data):
-    with open("users.json", "w") as f:
-        json.dump(users_data, f, indent=2)
-
-# Add registration endpoint
-@app.post("/api/v1/users/register")
-async def register_user(user_in: UserCreate):
-    # Load existing users
-    users_data = get_users_file()
+            print(f"Error loading users: {str(e)}")
+            self.users = {}
     
-    # Check if email already exists
-    for user in users_data["users"]:
-        if user["email"] == user_in.email:
-            raise HTTPException(
-                status_code=400,
-                detail="The user with this email already exists in the system."
-            )
+    def save_users(self):
+        """Save users to JSON file"""
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+            
+            with open(self.file_path, 'w') as f:
+                json.dump(self.users, f, indent=2)
+            print(f"Saved {len(self.users)} users to {self.file_path}")
+            return True
+        except Exception as e:
+            print(f"Error saving users: {str(e)}")
+            return False
     
-    # Create new user with hashed password
-    import uuid
-    new_user = {
-        "id": str(uuid.uuid4()),
-        "email": user_in.email,
-        "hashed_password": get_password_hash(user_in.password),
-        "full_name": user_in.full_name or "",
-        "is_active": True,
-        "is_superuser": False,
-        "created_at": datetime.now().isoformat()
-    }
-    
-    # Add to users list
-    users_data["users"].append(new_user)
-    
-    # Save updated users data
-    save_users_data(users_data)
-    
-    # Return user data (excluding password)
-    response_user = dict(new_user)
-    return response_user
-
-# Add login endpoint
-@app.post("/api/v1/login")
-async def login_for_access_token(request: Request):
-    try:
-        # Parse form data
-        form_data = await request.form()
-        username = form_data.get("username")
-        password = form_data.get("password")
-        
-        if not username or not password:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid credentials"
+    def get_user(self, username):
+        """Get user by username"""
+        if username == HOST_USERNAME:
+            return UserInDB(
+                username=HOST_USERNAME,
+                hashed_password=get_password_hash(HOST_PASSWORD),
+                is_host=True,
+                email="admin@example.com"
             )
         
-        # Load users
-        users_data = get_users_file()
+        user_dict = self.users.get(username)
+        if user_dict:
+            return UserInDB(**user_dict)
+        return None
+    
+    def create_user(self, user_data):
+        """Create a new user"""
+        if user_data.username in self.users:
+            return False, "Username already exists"
+            
+        if user_data.username == HOST_USERNAME:
+            return False, "Username not allowed"
         
-        # Find user by email
-        user = None
-        for u in users_data["users"]:
-            if u["email"] == username:
-                user = u
-                break
+        # Hash password
+        hashed_password = get_password_hash(user_data.password)
         
-        if not user or user["hashed_password"] != get_password_hash(password):
-            raise HTTPException(
-                status_code=400,
-                detail="Incorrect email or password"
-            )
-        
-        if not user["is_active"]:
-            raise HTTPException(
-                status_code=400,
-                detail="Inactive user"
-            )
-        
-        # Generate a simple token (in a real app, use JWT)
-        import random
-        import string
-        token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
-        
-        return {
-            "access_token": token,
-            "token_type": "bearer"
+        # Create user data (regular users only, host admin is hardcoded)
+        user_dict = {
+            "username": user_data.username,
+            "email": user_data.email,
+            "full_name": user_data.full_name,
+            "hashed_password": hashed_password,
+            "disabled": False,
+            "is_host": False  # All registered users are regular users
         }
-    except Exception as e:
-        print(f"Login error: {str(e)}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Login failed: {str(e)}"
-        )
-
-# Request password reset
-@app.post("/api/v1/reset-password-request")
-async def request_password_reset(request_data: PasswordResetRequest):
-    try:
-        email = request_data.email
         
-        if not email:
-            raise HTTPException(
-                status_code=400,
-                detail="Email is required"
-            )
-        
-        # Load users
-        users_data = get_users_file()
-        
-        # Check if user exists
-        user_exists = False
-        for user in users_data["users"]:
-            if user["email"] == email:
-                user_exists = True
-                break
-        
-        if not user_exists:
-            # For security, still return success even if email not found
-            return {"status": "success", "message": "If your email is registered, you will receive a password reset link."}
-        
-        # Generate reset code
-        import random
-        import string
-        reset_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-        
-        # In a real app, you would:
-        # 1. Store this reset code (e.g., in a database with an expiration time)
-        # 2. Send an email to the user with a link containing the code
-        
-        # For demo purposes, we'll add the reset code to the user's record
-        for user in users_data["users"]:
-            if user["email"] == email:
-                user["reset_code"] = reset_code
-                user["reset_code_expires"] = (datetime.now() + timedelta(hours=1)).isoformat()
-                break
-        
-        # Save users data with reset code
-        save_users_data(users_data)
-        
-        # In a real app, send an email here
-        print(f"PASSWORD RESET CODE for {email}: {reset_code}")
-        
-        return {"status": "success", "message": "If your email is registered, you will receive a password reset link."}
+        # Save to memory and file
+        self.users[user_data.username] = user_dict
+        if self.save_users():
+            return True, "User created successfully"
+        else:
+            # Remove from memory if save failed
+            del self.users[user_data.username]
+            return False, "Failed to save user data"
     
-    except Exception as e:
-        print(f"Password reset request error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Password reset request failed: {str(e)}"
-        )
-
-# Verify reset code and set new password
-@app.post("/api/v1/reset-password-verify")
-async def verify_reset_password(verify_data: PasswordResetVerify):
-    try:
-        email = verify_data.email
-        reset_code = verify_data.reset_code
-        new_password = verify_data.new_password
-        
-        if not email or not reset_code or not new_password:
-            raise HTTPException(
-                status_code=400,
-                detail="All fields are required"
+    def authenticate_user(self, username, password):
+        """Authenticate user with username and password"""
+        # Special case for host admin
+        if username == HOST_USERNAME and password == HOST_PASSWORD:
+            return UserInDB(
+                username=HOST_USERNAME,
+                hashed_password=get_password_hash(HOST_PASSWORD),
+                is_host=True,
+                email="admin@example.com"
             )
         
-        if len(new_password) < 8:
-            raise HTTPException(
-                status_code=400,
-                detail="Password must be at least 8 characters long"
-            )
+        # Regular user authentication
+        user = self.get_user(username)
+        if not user:
+            return False
         
-        # Load users
-        users_data = get_users_file()
-        
-        # Find user and verify reset code
-        user_found = False
-        code_valid = False
-        
-        for user in users_data["users"]:
-            if user["email"] == email:
-                user_found = True
-                if user.get("reset_code") == reset_code:
-                    # Check if code is expired
-                    if "reset_code_expires" in user:
-                        expires = datetime.fromisoformat(user["reset_code_expires"])
-                        if datetime.now() < expires:
-                            code_valid = True
-                            # Update password
-                            user["hashed_password"] = get_password_hash(new_password)
-                            # Remove reset code
-                            user.pop("reset_code", None)
-                            user.pop("reset_code_expires", None)
-                break
-        
-        if not user_found:
-            raise HTTPException(
-                status_code=400,
-                detail="User not found"
-            )
-        
-        if not code_valid:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid or expired reset code"
-            )
-        
-        # Save updated user data
-        save_users_data(users_data)
-        
-        return {"status": "success", "message": "Password has been reset successfully"}
+        if not verify_password(password, user.hashed_password):
+            return False
+            
+        return user
     
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Password reset verification error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Password reset verification failed: {str(e)}"
-        )
+    def get_all_users(self):
+        """Get list of all users (for admin)"""
+        user_list = []
+        for username, user_data in self.users.items():
+            # Don't include password hash
+            user_list.append({
+                "username": username,
+                "email": user_data.get("email"),
+                "full_name": user_data.get("full_name"),
+                "disabled": user_data.get("disabled", False),
+                "is_host": user_data.get("is_host", False)
+            })
+        return user_list
 
 # Initialize managers
 Config.validate_env_vars()
 chatbot_manager = ChatbotManager()
+user_manager = UserManager()
 
 # API Routes
 @app.get("/", response_class=HTMLResponse)
@@ -816,175 +800,246 @@ async def root():
         return f.read()
 
 @app.get("/chatbots")
-async def list_chatbots():
-    chatbots_info = []
-    for name in chatbot_manager.chatbots:
-        chatbots_info.append(chatbot_manager.get_chatbot_info(name))
-    return {"status": "success", "chatbots": chatbots_info}
+async def list_chatbots(current_user: User = Depends(get_current_active_user)):
+    try:
+        if current_user.is_host or current_user.username == HOST_USERNAME:
+            # Host admin can see all chatbots
+            chatbots = chatbot_manager.get_all_chatbots()
+        else:
+            # Regular users can only see their chatbots
+            chatbots = chatbot_manager.get_user_chatbots(current_user.username)
+        
+        return {"chatbots": chatbots}
+    except Exception as e:
+        print(f"Error listing chatbots: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list chatbots: {str(e)}"
+        )
 
 @app.post("/chatbot/create")
-async def create_chatbot(request: Request):
+async def create_chatbot(request: Request, current_user: User = Depends(get_current_active_user)):
     try:
         data = await request.json()
         chatbot_name = data.get("name")
         
         if not chatbot_name:
-            return JSONResponse(
-                status_code=400,
-                content={"status": "error", "message": "Chatbot name is required"}
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Chatbot name is required"
+            )
+            
+        # Associate chatbot with user unless it's the host admin
+        user_id = None if (current_user.is_host or current_user.username == HOST_USERNAME) else current_user.username
+        
+        try:
+            result = chatbot_manager.create_chatbot(chatbot_name, user_id)
+            
+            # Format response to match what frontend expects
+            return {
+                "status": "success",
+                "message": f"Chatbot '{chatbot_name}' created successfully",
+                "chatbot_id": result["chatbot_id"],
+                "name": chatbot_name
+            }
+        except ValueError as ve:
+            # Handle validation errors
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(ve)
             )
         
-        result = chatbot_manager.create_chatbot(chatbot_name)
-        return JSONResponse(content=result)
-        
     except HTTPException as he:
-        return JSONResponse(
-            status_code=he.status_code,
-            content={"status": "error", "message": str(he.detail)}
-        )
+        raise he
     except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": f"Server error: {str(e)}"}
+        print(f"Error creating chatbot: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create chatbot: {str(e)}"
         )
 
-@app.delete("/chatbot/{chatbot_name}")
-async def delete_chatbot(chatbot_name: str):
-    return chatbot_manager.delete_chatbot(chatbot_name)
-
-@app.post("/chatbot/{chatbot_name}/upload")
-async def upload_file(chatbot_name: str, file: UploadFile = File(...)):
-    if chatbot_name not in chatbot_manager.chatbots:
-        raise HTTPException(404, "Chatbot not found")
-
+@app.delete("/chatbot/{chatbot_id}")
+async def delete_chatbot(chatbot_id: str, current_user: User = Depends(get_current_active_user)):
     try:
-        # Create directory if it doesn't exist
-        chatbot_dir = os.path.join(chatbot_manager.base_upload_dir, chatbot_name)
-        os.makedirs(chatbot_dir, exist_ok=True)
-
-        # Validate file size
-        max_size = 10 * 1024 * 1024  # 10MB
-        file_size = 0
-        file_content = b''
-        
-        # Read file in chunks
-        while chunk := await file.read(8192):
-            file_size += len(chunk)
-            file_content += chunk
-            if file_size > max_size:
-                raise HTTPException(400, "File too large (max 10MB)")
-
-        # Validate file type
-        file_extension = file.filename.lower().split('.')[-1]
-        if file_extension not in ['pdf', 'docx', 'txt']:
-            raise HTTPException(400, "Unsupported file format. Only PDF, DOCX, and TXT files are allowed.")
-
-        # Save file
-        file_path = os.path.join(chatbot_dir, file.filename)
-        with open(file_path, "wb") as buffer:
-            buffer.write(file_content)
-
-        # Process file content
-        if file_extension == 'pdf':
-            text = TextProcessor.extract_text_from_pdf(file_content)
-        elif file_extension == 'docx':
-            text = TextProcessor.extract_text_from_docx(file_content)
-        else:  # txt file
-            text = file_content.decode('utf-8')
-
-        if not text:
-            os.remove(file_path)
-            raise HTTPException(400, "No text could be extracted from the file")
-
-        # Process chunks
-        chunks = TextProcessor.chunk_text(text)
-        service_manager = chatbot_manager.chatbots[chatbot_name]["service_manager"]
-
-        print(f"Processing {len(chunks)} chunks for file: {file.filename}")
-        vectors_to_upsert = []
-
-        # Process in batches of 10 chunks
-        BATCH_SIZE = 10
-        for i in range(0, len(chunks), BATCH_SIZE):
-            batch_chunks = chunks[i:i+BATCH_SIZE]
-            filtered_chunks = [chunk for chunk in batch_chunks if chunk.strip()]
+        # Check if chatbot exists
+        if chatbot_id not in chatbot_manager.chatbots:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Chatbot {chatbot_id} not found"
+            )
             
-            if filtered_chunks:
-                # Get embeddings for batch
-                response = service_manager.cohere_client.embed(
-                    texts=filtered_chunks,
-                    model='embed-english-v3.0',
-                    input_type="search_document"
+        # Check if user has access to this chatbot
+        if not (current_user.is_host or current_user.username == HOST_USERNAME):
+            # For regular users, check if the chatbot belongs to them
+            chatbot_info = chatbot_manager.chatbots.get(chatbot_id)
+            if not chatbot_info or chatbot_info.get("user_id") != current_user.username:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have permission to delete this chatbot"
                 )
-                
-                # Process batch results
-                for j, embedding in enumerate(response.embeddings):
-                    chunk_index = i + j
-                    if chunk_index < len(chunks):  # Safety check
-                        vectors_to_upsert.append({
-                            'id': f'{chatbot_name}_chunk_{chunk_index}_{os.urandom(4).hex()}',
-                            'values': embedding,
-                            'metadata': {
-                                'text': filtered_chunks[j],
-                                'file_name': file.filename,
-                                'chatbot': chatbot_name
-                            }
-                        })
-                
-                # Add rate limiting delay - stay under 40 calls per minute
-                time.sleep(1.5)  # 1.5 seconds delay
-
-        if vectors_to_upsert:
-            # Upsert vectors in batches to avoid overwhelming Pinecone
-            UPSERT_BATCH_SIZE = 100
-            for i in range(0, len(vectors_to_upsert), UPSERT_BATCH_SIZE):
-                batch = vectors_to_upsert[i:i+UPSERT_BATCH_SIZE]
-                service_manager.index.upsert(vectors=batch)
-                print(f"Upserted batch {i//UPSERT_BATCH_SIZE + 1} of {len(vectors_to_upsert)//UPSERT_BATCH_SIZE + 1}")
-                time.sleep(1)  # Add delay between batches
-
-        # Update chatbot files list
-        if file.filename not in chatbot_manager.chatbots[chatbot_name]["files"]:
-            chatbot_manager.chatbots[chatbot_name]["files"].append(file.filename)
-
-        return JSONResponse(
-            content={
-                "status": "success",
-                "message": f"File '{file.filename}' uploaded successfully",
-                "details": {
-                    "filename": file.filename,
-                    "size": file_size,
-                    "chunks_processed": len(vectors_to_upsert),
-                    "text_length": len(text)
-                }
-            }
-        )
-
+        
+        # Delete the chatbot
+        try:
+            result = chatbot_manager.delete_chatbot(chatbot_id)
+            return result
+        except ValueError as ve:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(ve)
+            )
+            
     except HTTPException as he:
-        print(f"HTTP Exception during file upload: {str(he)}")
-        return JSONResponse(
-            status_code=he.status_code,
-            content={"status": "error", "message": str(he.detail)}
-        )
+        raise he
     except Exception as e:
-        print(f"Error during file upload: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": f"Upload failed: {str(e)}"}
+        print(f"Error deleting chatbot: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete chatbot: {str(e)}"
+        )
+
+@app.post("/chatbot/{chatbot_id}/upload")
+async def upload_file(chatbot_id: str, file: UploadFile = File(...), current_user: User = Depends(get_current_active_user)):
+    try:
+        # Check if chatbot exists
+        if chatbot_id not in chatbot_manager.chatbots:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Chatbot {chatbot_id} not found"
+            )
+        
+        # Check if user has access to this chatbot
+        if not (current_user.is_host or current_user.username == HOST_USERNAME):
+            chatbot_info = chatbot_manager.chatbots.get(chatbot_id)
+            if not chatbot_info or chatbot_info.get("user_id") != current_user.username:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have permission to upload to this chatbot"
+                )
+        
+        # Validate file type
+        filename = file.filename
+        file_extension = os.path.splitext(filename)[1].lower()
+        
+        if file_extension not in ['.pdf', '.docx', '.txt']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only PDF, DOCX, and TXT files are allowed"
+            )
+        
+        # Create document directory if it doesn't exist
+        documents_dir = f"data/{chatbot_id}/documents"
+        os.makedirs(documents_dir, exist_ok=True)
+        
+        # Save file
+        file_path = os.path.join(documents_dir, filename)
+        contents = await file.read()
+        
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        
+        # Process file content
+        text = ""
+        if file_extension == '.pdf':
+            text = TextProcessor.extract_text_from_pdf(contents)
+        elif file_extension == '.docx':
+            text = TextProcessor.extract_text_from_docx(contents)
+        elif file_extension == '.txt':
+            text = contents.decode('utf-8')
+        
+        # Chunk text
+        chunks = TextProcessor.chunk_text(text)
+        
+        # Get Pinecone index
+        index_name = chatbot_manager.chatbots[chatbot_id]["index_name"]
+        
+        # Create embeddings and store in Pinecone
+        try:
+            # Initialize service manager if not already initialized
+            service_manager = ServiceManager()
+            service_manager.initialize_services(index_name)
+            
+            # Generate embeddings for chunks
+            co_client = service_manager.co
+            if not co_client:
+                raise ValueError("Cohere client not initialized")
+                
+            embeddings_response = co_client.embed(
+                texts=chunks,
+                model='embed-english-v3.0',
+                input_type='search_document'
+            )
+            
+            # Get vectors from response
+            vectors = embeddings_response.embeddings
+            
+            # Create metadata for chunks
+            upsert_data = []
+            for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+                upsert_data.append({
+                    'id': f"{filename}-{i}",
+                    'values': vector,
+                    'metadata': {
+                        'text': chunk,
+                        'source': filename,
+                        'chunk_id': i
+                    }
+                })
+            
+            # Upsert to Pinecone
+            service_manager.index.upsert(
+                vectors=upsert_data
+            )
+            
+            # Add file to chatbot
+            chatbot_manager.add_file_to_chatbot(chatbot_id, filename)
+            
+            return {
+                "status": "success",
+                "message": f"File {filename} uploaded and processed successfully",
+                "chunks": len(chunks)
+            }
+        except Exception as e:
+            print(f"Error processing file: {str(e)}")
+            
+            # Cleanup the saved file if processing failed
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing file: {str(e)}"
+            )
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error uploading file: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload file: {str(e)}"
         )
 
 @app.post("/chatbot/{chatbot_name}/ask")
-async def chat_with_bot(chatbot_name: str, request: QueryRequest):
-    """Handles chat requests for different AI models."""
+async def chat_with_bot(chatbot_name: str, request: QueryRequest, current_user: User = Depends(get_current_active_user)):
+    # Check if user has access to this chatbot
+    if not (getattr(current_user, "is_host", False) or current_user.username == HOST_USERNAME):
+        # For regular users, check if the chatbot belongs to them
+        chatbot_info = chatbot_manager.chatbots.get(chatbot_name)
+        if not chatbot_info or chatbot_info.get("user_id") != current_user.username:
+            raise HTTPException(status_code=403, detail="You don't have permission to use this chatbot")
+
     if chatbot_name not in chatbot_manager.chatbots:
         raise HTTPException(404, "Chatbot not found")
 
     try:
-        # Get relevant context from vector store
-        service_manager = chatbot_manager.chatbots[chatbot_name]["service_manager"]
+        # Get the index name for this chatbot
+        index_name = chatbot_manager.chatbots[chatbot_name]["index_name"]
+        
+        # Initialize service manager for this chatbot
+        service_manager = ServiceManager()
+        service_manager.initialize_services(index_name)
         
         # Get query embedding
-        query_embedding = service_manager.cohere_client.embed(
+        query_embedding = service_manager.co.embed(
             texts=[request.query],
             model='embed-english-v3.0',
             input_type="search_query"
@@ -994,10 +1049,7 @@ async def chat_with_bot(chatbot_name: str, request: QueryRequest):
         search_results = service_manager.index.query(
             vector=query_embedding,
             top_k=3,
-            include_metadata=True,
-            filter={
-                'chatbot': {'$eq': chatbot_name}
-            }
+            include_metadata=True
         )
 
         # Extract relevant contexts
@@ -1005,7 +1057,7 @@ async def chat_with_bot(chatbot_name: str, request: QueryRequest):
         
         # Get chat history
         chat_history = chatbot_manager.get_chat_history(chatbot_name)
-        # Get the last 3 conversations for context
+        # Get the last 3 conversations for context (reduced from 5)
         recent_history = chat_history[-3:] if len(chat_history) > 3 else chat_history
         
         # Prepare prompt with context and chat history
@@ -1054,7 +1106,7 @@ Please provide a clear and concise answer based on both the context and conversa
                 
                 combined_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-                response = service_manager.cohere_client.chat(
+                response = service_manager.co.chat(
                     message=user_prompt,
                     model="command",
                     temperature=0.7,
@@ -1117,18 +1169,39 @@ Please provide a clear and concise answer based on both the context and conversa
             detail=f"Error processing chat request: {str(e)}"
         )
 
-
-@app.get("/chatbot/{chatbot_name}/history")
-async def get_chat_history(chatbot_name: str):
-    if chatbot_name not in chatbot_manager.chatbots:
-        raise HTTPException(404, "Chatbot not found")
-    
-    history = chatbot_manager.get_chat_history(chatbot_name)
-    return {"status": "success", "history": history}
+@app.get("/chatbot/{chatbot_id}/history")
+async def get_chat_history(chatbot_id: str, current_user: User = Depends(get_current_active_user)):
+    try:
+        # Check if user has access to this chatbot
+        if not (current_user.is_host or current_user.username == HOST_USERNAME):
+            # For regular users, check if the chatbot belongs to them
+            chatbot_info = chatbot_manager.chatbots.get(chatbot_id)
+            if not chatbot_info or chatbot_info.get("user_id") != current_user.username:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have permission to access this chatbot"
+                )
+        
+        try:
+            history = chatbot_manager.get_chat_history(chatbot_id)
+            return {"history": history}
+        except ValueError as ve:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(ve)
+            )
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error getting chat history: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get chat history: {str(e)}"
+        )
 
 def test_pinecone_connection():
     try:
-        pc = pinecone.Pinecone(api_key=Config.PINECONE_API_KEY)
+        pc = Pinecone(api_key=Config.PINECONE_API_KEY)
         indexes = pc.list_indexes()
         print(f"Successfully connected to Pinecone. Available indexes: {[index.name for index in indexes]}")
         return True
@@ -1136,369 +1209,101 @@ def test_pinecone_connection():
         print(f"Failed to connect to Pinecone: {str(e)}")
         return False
 
-# Add endpoint to get current user
-@app.get("/api/v1/users/me")
-async def get_current_user(request: Request):
-    try:
-        # In a real app, validate the token
-        # For this simple implementation, we'll just return the first user
-        # or a sample user if none exists
-        
-        # Check for Authorization header
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        token = auth_header.replace("Bearer ", "")
-        
-        # In a real app, we would validate the token and get the user
-        # For now, just return the first user or a sample
-        users_data = get_users_file()
-        
-        if users_data["users"]:
-            # Return the first user (simulating token validation)
-            user = users_data["users"][0]
-            return {
-                "id": user["id"],
-                "email": user["email"],
-                "full_name": user["full_name"],
-                "is_active": user["is_active"],
-                "is_superuser": user["is_superuser"]
-            }
-        else:
-            # If no users, return a sample user
-            return {
-                "id": "sample-user-id",
-                "email": "demo@example.com",
-                "full_name": "Demo User",
-                "is_active": True,
-                "is_superuser": False
-            }
-    except Exception as e:
-        print(f"Get user error: {str(e)}")
+# Authentication Endpoints
+@app.post("/register", response_model=User)
+async def register_user(user_data: UserCreate):
+    print(f"Registration attempt for username: {user_data.username}")
+    
+    # Validate username length
+    if not user_data.username or len(user_data.username) < 3:
+        print(f"Registration failed: Username too short ({len(user_data.username) if user_data.username else 0} chars)")
         raise HTTPException(
-            status_code=401,
-            detail="Could not validate credentials"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username must be at least 3 characters long"
         )
-
-# Add endpoint to get all chatbots for API v1
-@app.get("/api/v1/chatbots/")
-async def get_user_chatbots(request: Request):
-    try:
-        # Check for Authorization header
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        # We're reusing the existing chatbot manager
-        # In a real app with proper auth, you'd filter by user ID
-        chatbot_manager = ChatbotManager()
-        chatbot_manager.load_existing_chatbots()
-        
-        chatbots_list = []
-        for name, info in chatbot_manager.chatbots.items():
-            # Convert to the format expected by the frontend
-            chatbot = {
-                "id": name,  # Using name as ID for simplicity
-                "name": name,
-                "owner_id": "current-user",  # Placeholder
-                "default_model": "openai",  # Default model
-                "created_at": info.get("creation_date", datetime.now().isoformat()),
-                "files_count": len(info.get("files", [])),
-                "messages_count": len(chatbot_manager.get_chat_history(name))
-            }
-            chatbots_list.append(chatbot)
-        
-        return chatbots_list
-    except Exception as e:
-        print(f"Error getting chatbots: {str(e)}")
+    
+    # Validate password length    
+    if not user_data.password or len(user_data.password) < 6:
+        print(f"Registration failed: Password too short")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get chatbots: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters long"
         )
-
-# Add endpoint to create a chatbot for API v1
-@app.post("/api/v1/chatbots/")
-async def create_user_chatbot(request: Request):
+    
     try:
-        # Check authorization
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        # Parse request body
-        data = await request.json()
-        name = data.get("name")
-        
-        if not name:
-            raise HTTPException(status_code=400, detail="Chatbot name is required")
-        
-        # Create the chatbot using existing manager
-        chatbot_manager = ChatbotManager()
-        success = chatbot_manager.create_chatbot(name)
+        success, message = user_manager.create_user(user_data)
         
         if not success:
-            raise HTTPException(status_code=400, detail="Failed to create chatbot")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
         
-        # Get chatbot info
-        info = chatbot_manager.get_chatbot_info(name)
+        print(f"User registered successfully: {user_data.username}")
         
-        # Return in the format expected by the frontend
+        # Return user info without password
         return {
-            "id": name,
-            "name": name,
-            "owner_id": "current-user",
-            "default_model": data.get("default_model", "openai"),
-            "created_at": datetime.now().isoformat(),
-            "files_count": 0,
-            "messages_count": 0
+            "username": user_data.username,
+            "email": user_data.email,
+            "full_name": user_data.full_name,
+            "disabled": False,
+            "is_host": False  # All registered users are regular users
         }
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error creating chatbot: {str(e)}")
+        print(f"Error registering user: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create chatbot: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
         )
 
-# Add endpoint to get a specific chatbot
-@app.get("/api/v1/chatbots/{chatbot_id}")
-async def get_chatbot(request: Request, chatbot_id: str):
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    print(f"Login attempt for username: {form_data.username}")
+    
     try:
-        # Check for Authorization header
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
+        # Validate credentials
+        user = authenticate_user(form_data.username, form_data.password)
+        if not user:
+            print(f"Login failed: Invalid credentials for user {form_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         
-        # Get chatbot manager
-        chatbot_manager = ChatbotManager()
-        chatbot_manager.load_existing_chatbots()
-        
-        # Get chatbot info (using name as ID for simplicity)
-        if chatbot_id not in chatbot_manager.chatbots:
-            raise HTTPException(status_code=404, detail=f"Chatbot with ID {chatbot_id} not found")
-        
-        info = chatbot_manager.chatbots[chatbot_id]
-        
-        # Return in the format expected by the frontend
-        return {
-            "id": chatbot_id,
-            "name": chatbot_id,
-            "owner_id": "current-user",
-            "default_model": info.get("default_model", "openai"),
-            "created_at": info.get("creation_date", datetime.now().isoformat()),
-            "files_count": len(info.get("files", [])),
-            "messages_count": len(chatbot_manager.get_chat_history(chatbot_id))
+        # Create token data with is_host flag
+        is_host = getattr(user, "is_host", False) or user.username == HOST_USERNAME
+        token_data = {
+            "sub": user.username,
+            "is_host": is_host
         }
+        
+        # Generate token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data=token_data, expires_delta=access_token_expires
+        )
+        
+        print(f"Login successful: {user.username} (is_host: {is_host})")
+        print(f"Generated token with expiry: {access_token_expires}")
+        print(f"Token first 20 chars: {access_token[:20]}...")
+        
+        # Return token information
+        return {"access_token": access_token, "token_type": "bearer"}
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error getting chatbot: {str(e)}")
+        print(f"Login error: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get chatbot: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
         )
 
-# Add endpoint to get chat history
-@app.get("/api/v1/chat/history/{chatbot_id}")
-async def get_chat_history(request: Request, chatbot_id: str):
-    try:
-        # Check for Authorization header
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        # Get chatbot manager
-        chatbot_manager = ChatbotManager()
-        
-        # Get chat history
-        history = chatbot_manager.get_chat_history(chatbot_id)
-        
-        # Format for API response
-        messages = []
-        for entry in history:
-            messages.append({
-                "id": entry.get("id", str(uuid.uuid4())),
-                "query": entry.get("query", ""),
-                "response": entry.get("answer", ""),
-                "model": entry.get("model", "openai"),
-                "created_at": entry.get("timestamp", datetime.now().isoformat())
-            })
-        
-        return {
-            "messages": messages,
-            "total": len(messages)
-        }
-    except Exception as e:
-        print(f"Error getting chat history: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get chat history: {str(e)}"
-        )
-
-# Add endpoint to send message to chatbot
-@app.post("/api/v1/chat/{chatbot_id}")
-async def chat_with_chatbot(request: Request, chatbot_id: str):
-    try:
-        # Check for Authorization header
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        # Parse request body
-        data = await request.json()
-        query = data.get("query")
-        model = data.get("model", "openai")
-        
-        if not query:
-            raise HTTPException(status_code=400, detail="Query is required")
-        
-        # Get chatbot manager
-        chatbot_manager = ChatbotManager()
-        chatbot_manager.load_existing_chatbots()
-        
-        # Check if chatbot exists
-        if chatbot_id not in chatbot_manager.chatbots:
-            raise HTTPException(status_code=404, detail=f"Chatbot with ID {chatbot_id} not found")
-        
-        # Process the query
-        response = await chatbot_manager.process_query(chatbot_id, query, model)
-        
-        return {
-            "id": str(uuid.uuid4()),
-            "chatbot_id": chatbot_id,
-            "query": query,
-            "response": response,
-            "model": model,
-            "created_at": datetime.now().isoformat()
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error processing chat query: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process query: {str(e)}"
-        )
-
-# Add endpoint to get files for a chatbot
-@app.get("/api/v1/files/chatbot/{chatbot_id}")
-async def get_chatbot_files(request: Request, chatbot_id: str):
-    try:
-        # Check for Authorization header
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        # Get chatbot manager
-        chatbot_manager = ChatbotManager()
-        chatbot_manager.load_existing_chatbots()
-        
-        # Check if chatbot exists
-        if chatbot_id not in chatbot_manager.chatbots:
-            raise HTTPException(status_code=404, detail=f"Chatbot with ID {chatbot_id} not found")
-        
-        # Get files
-        chatbot_info = chatbot_manager.chatbots[chatbot_id]
-        chatbot_files = chatbot_info.get("files", [])
-        
-        # Format for API response
-        files = []
-        for file_name in chatbot_files:
-            file_id = str(uuid.uuid4())  # In a real app, these would be persistent IDs
-            files.append({
-                "id": file_id,
-                "filename": file_name,
-                "original_filename": file_name,
-                "file_size": 1024,  # Placeholder
-                "file_type": file_name.split(".")[-1],
-                "chatbot_id": chatbot_id,
-                "is_processed": True,
-                "chunks_count": 10,  # Placeholder
-                "created_at": datetime.now().isoformat()
-            })
-        
-        return files
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error getting chatbot files: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get files: {str(e)}"
-        )
-
-# Add endpoint to upload a file to a chatbot
-@app.post("/api/v1/files/upload/{chatbot_id}")
-async def upload_file_to_chatbot(
-    request: Request,
-    chatbot_id: str,
-    file: UploadFile = File(...)
-):
-    try:
-        # Check for Authorization header
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        # Get chatbot manager
-        chatbot_manager = ChatbotManager()
-        chatbot_manager.load_existing_chatbots()
-        
-        # Check if chatbot exists
-        if chatbot_id not in chatbot_manager.chatbots:
-            raise HTTPException(status_code=404, detail=f"Chatbot with ID {chatbot_id} not found")
-        
-        # Get the file content
-        file_content = await file.read()
-        
-        # Upload the file using the existing implementation
-        result = await chatbot_manager.upload_file(chatbot_id, file.filename, file_content)
-        
-        if not result:
-            raise HTTPException(status_code=500, detail="Failed to upload file")
-        
-        # Return file info in the expected format
-        return {
-            "id": str(uuid.uuid4()),
-            "filename": file.filename,
-            "original_filename": file.filename,
-            "file_size": len(file_content),
-            "file_type": file.content_type,
-            "chatbot_id": chatbot_id,
-            "is_processed": False,
-            "chunks_count": 0,
-            "created_at": datetime.now().isoformat()
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error uploading file: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to upload file: {str(e)}"
-        )
-
-# Add endpoint to delete a file
-@app.delete("/api/v1/files/{file_id}")
-async def delete_file(request: Request, file_id: str):
-    try:
-        # Check for Authorization header
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        # In a real app, we would delete the file from storage and database
-        # For now, we'll just return a success response
-        
-        return {"message": "File deleted successfully"}
-    except Exception as e:
-        print(f"Error deleting file: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete file: {str(e)}"
-        )
+@app.get("/users/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    return current_user
 
 if __name__ == "__main__":
     try:

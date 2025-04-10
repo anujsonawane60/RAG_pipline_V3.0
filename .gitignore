@@ -1,26 +1,71 @@
 # Virtual environment
 myenv/
 venv/
+env/
+ENV/
+.Python
+.env-*
 
 # Environment variables
 .env
+*.env
+.env.*
 
 # Uploaded files (user-uploaded content)
 uploaded_files/
+uploads/
+media/
 
 # Chat history (generated content)
 chat_history/
 
 # Python compiled files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Log files
 *.log
+logs/
 
-# IDE project files (example for VS Code)
+# IDE project files
 .vscode/
-
-# Other common files/folders
-*.DS_Store
 .idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Database
+*.sqlite3
+*.db
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Other
+node_modules/
+.qodo
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

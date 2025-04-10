@@ -10,6 +10,11 @@ This project implements a Retrieval-Augmented Generation (RAG) chatbot platform 
 *   Choose between OpenAI, Cohere, and TogetherAI language models.
 *   Chat history is saved.
 * The type and size of the uploaded files are validated.
+* User authentication system with registration and login.
+* Role-based access control with admin and regular user roles.
+* Admin users can view and manage all chatbots.
+* Regular users can only access their own chatbots.
+* Secure JWT token-based authentication.
 
 ## Tech Stack
 
@@ -59,14 +64,28 @@ uvicorn main:app --reload
 
 ## Usage
 1. Go to http://127.0.0.1:8000/
-2. Click on `Chatbots` in the menu.
-3. Create a chatbot clicking on `Create New` button.
-4. Select a chatbot.
-5. Upload a file clicking on `Choose File` and then `Upload File`.
-6. Select a model and send messages to the chatbot.
+2. Register a new account or log in with existing credentials.
+3. Admin access is available using hardcoded credentials (username: host_admin, password: admin123).
+4. Click on `Chatbots` in the menu.
+5. Create a chatbot clicking on `Create New` button.
+6. Select a chatbot.
+7. Upload a file clicking on `Choose File` and then `Upload File`.
+8. Select a model and send messages to the chatbot.
 
 ## API Endpoints
 
+### Authentication Endpoints
+- **POST /register**: Register a new user account
+- **POST /token**: Log in and get an access token
+- **GET /users/me**: Get current authenticated user information
+
+### Chatbot Endpoints
+- **GET /chatbots**: List all chatbots (admin sees all, users see only their own)
+- **POST /chatbot/create**: Create a new chatbot
+- **DELETE /chatbot/{chatbot_id}**: Delete a chatbot
+- **POST /chatbot/{chatbot_id}/upload**: Upload a file to a chatbot
+- **POST /chatbot/{chatbot_name}/ask**: Chat with a chatbot
+- **GET /chatbot/{chatbot_id}/history**: Get chat history for a chatbot
 
 ## Contributing
 

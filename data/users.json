@@ -1,0 +1,18 @@
+{
+  "anujsonawane60": {
+    "username": "anujsonawane60",
+    "email": "anujsonawane60@gmail.com",
+    "full_name": "Anuj Sadashiv Sonawane",
+    "hashed_password": "$2b$12$YWSNu0yR/xvzGKJ6RPOO..Wjpvo6n8ZL7aLsiq0cHgf..gtUPgB8y",
+    "disabled": false,
+    "is_host": false
+  },
+  "satyajit": {
+    "username": "satyajit",
+    "email": "satya96k@gmail.com",
+    "full_name": "satyajit pawar",
+    "hashed_password": "$2b$12$qwHp7AIyuLuV4bWQ1dH29.vXEjVTAfDPT66/gvNCSbdI152lZFUNu",
+    "disabled": false,
+    "is_host": false
+  }
+}
