@@ -1,15 +1,1 @@
-{
-  "users": [
-    {
-      "id": "79d20046-9dd5-4854-b67a-b56841ed1b06",
-      "email": "anujsonawane60@gmail.com",
-      "hashed_password": "fad7ffdf68711e3f03b0cecdc921acfc3a4cc3cfac758d52d17836adf738e84e",
-      "full_name": "Anuj Sadashiv Sonawane",
-      "is_active": true,
-      "is_superuser": false,
-      "created_at": "2025-04-06T10:45:07.200968",
-      "reset_code": "9M751T9J",
-      "reset_code_expires": "2025-04-06T20:37:43.836643"
-    }
-  ]
-}
+
