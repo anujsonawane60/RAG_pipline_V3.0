@@ -94,6 +94,58 @@ uvicorn main:app --reload
 
 5. The application will be available at http://localhost:8000
 
+### Using Pre-built Docker Image
+
+You can also use the pre-built Docker image from Docker Hub:
+
+1. Create a `.env` file with your API keys as shown above.
+
+2. Run the container directly:
+   ```bash
+   docker run -d \
+     --name rag-chatbot \
+     -p 8000:8000 \
+     --env-file .env \
+     -v rag_uploaded_files:/app/uploaded_files \
+     -v rag_chat_history:/app/chat_history \
+     -v rag_data:/app/data \
+     yourusername/rag-chatbot:latest
+   ```
+   
+   Replace `yourusername/rag-chatbot:latest` with the actual image name from Docker Hub.
+
+3. Alternatively, use the docker-compose approach with the published image:
+   
+   Create a `docker-compose.yml` file:
+   ```yaml
+   version: '3.8'
+   
+   services:
+     rag-chatbot:
+       image: yourusername/rag-chatbot:latest
+       ports:
+         - "8000:8000"
+       volumes:
+         - rag_uploaded_files:/app/uploaded_files
+         - rag_chat_history:/app/chat_history
+         - rag_data:/app/data
+       env_file:
+         - .env
+       restart: always
+   
+   volumes:
+     rag_uploaded_files:
+     rag_chat_history:
+     rag_data:
+   ```
+
+   Then run:
+   ```bash
+   docker-compose up -d
+   ```
+
+For more details on using the Docker image, see the [DOCKER_USAGE.md](DOCKER_USAGE.md) file.
+
 ## Usage
 1. Go to http://127.0.0.1:8000/
 2. Register a new account or log in with existing credentials.

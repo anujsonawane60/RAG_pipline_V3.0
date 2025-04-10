@@ -10,6 +10,16 @@ git add .
 git commit -m "comments"
 git push origin main
 ---------------------------------------------
+Docker :
+
+docker run -d --name rag-chatbot -p 8000:8000 --env-file .env -v rag_uploaded_files:/app/uploaded_files -v rag_chat_history:/app/chat_history -v rag_data:/app/data anujsonawane60/rag_chatbot:V2
+docker stop rag-chatbot
+docker start rag-chatbot
+
+
+
+----------------------------------------------
+
 
 So the specific embedding model you're using is:
 
