@@ -19,6 +19,10 @@ media/
 # Chat history (generated content)
 chat_history/
 
+# Application data
+data/
+*/data/
+
 # Python compiled files
 __pycache__/
 *.py[cod]
