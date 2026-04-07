@@ -60,12 +60,16 @@ This project implements a Retrieval-Augmented Generation (RAG) chatbot platform 
 6. Create a `.env` file and add your API Keys.
 
 ```
-OPENAI_API_KEY=your_openai_key 
-COHERE_API_KEY=your_cohere_key 
-TOGETHERAI_API_KEY=your_togetherai_key 
+OPENAI_API_KEY=your_openai_key
+COHERE_API_KEY=your_cohere_key
+TOGETHERAI_API_KEY=your_togetherai_key
 PINECONE_API_KEY=your_pinecone_key
-JWT_SECRET_KEY=your_secret_key_for_jwt
+JWT_SECRET_KEY=your_strong_random_secret_here
+HOST_USERNAME=host_admin
+HOST_PASSWORD=your_strong_admin_password_here
 ```
+
+See `.env.example` for a complete template.
 
 7. Run the app:
 
@@ -149,7 +153,7 @@ For more details on using the Docker image, see the [DOCKER_USAGE.md](DOCKER_USA
 ## Usage
 1. Go to http://127.0.0.1:8000/
 2. Register a new account or log in with existing credentials.
-3. Admin access is available using hardcoded credentials (username: host_admin, password: admin123).
+3. Admin access uses the `HOST_USERNAME` and `HOST_PASSWORD` set in your `.env` file.
 4. Click on `Dashboard` in the menu.
 5. Create a chatbot by clicking on the `Create New` button.
 6. Select a chatbot.
@@ -157,7 +161,7 @@ For more details on using the Docker image, see the [DOCKER_USAGE.md](DOCKER_USA
 8. Select a model and send messages to the chatbot.
 
 ### Admin Features
-1. Log in as admin (username: host_admin, password: admin123).
+1. Log in as admin using the credentials from your `.env` file.
 2. Access the Admin Dashboard by clicking the "Admin Dashboard" link in the navigation.
 3. View all chatbots in the system and their creators.
 4. Toggle chatbots between public and private visibility.

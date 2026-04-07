@@ -163,6 +163,13 @@
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Utility: escape HTML to prevent XSS
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+
         // Initialize variables
         let confirmActionCallback = null;
         const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
@@ -248,26 +255,26 @@
                     const isPublic = chatbot.is_public || false;
                     
                     row.innerHTML = `
-                        <td><small class="text-muted">${chatbot.id}</small></td>
-                        <td><strong>${chatbot.name}</strong></td>
-                        <td>${chatbot.user_id || 'System'}</td>
-                        <td>${chatbotDate}</td>
+                        <td><small class="text-muted">${escapeHtml(chatbot.id)}</small></td>
+                        <td><strong>${escapeHtml(chatbot.name)}</strong></td>
+                        <td>${escapeHtml(chatbot.user_id || 'System')}</td>
+                        <td>${escapeHtml(chatbotDate)}</td>
                         <td>
                             <div class="form-check form-switch">
-                                <input class="form-check-input toggle-public" type="checkbox" role="switch" 
-                                    id="publicToggle-${chatbot.id}" ${isPublic ? 'checked' : ''} 
-                                    data-id="${chatbot.id}" data-name="${chatbot.name}">
-                                <label class="form-check-label" for="publicToggle-${chatbot.id}">
+                                <input class="form-check-input toggle-public" type="checkbox" role="switch"
+                                    id="publicToggle-${escapeHtml(chatbot.id)}" ${isPublic ? 'checked' : ''}
+                                    data-id="${escapeHtml(chatbot.id)}" data-name="${escapeHtml(chatbot.name)}">
+                                <label class="form-check-label" for="publicToggle-${escapeHtml(chatbot.id)}">
                                     ${isPublic ? 'Public' : 'Private'}
                                 </label>
                             </div>
                         </td>
                         <td>
                             <div class="btn-group">
-                                <button class="btn btn-sm btn-primary view-chatbot" data-id="${chatbot.id}" data-name="${chatbot.name}">
+                                <button class="btn btn-sm btn-primary view-chatbot" data-id="${escapeHtml(chatbot.id)}" data-name="${escapeHtml(chatbot.name)}">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                <button class="btn btn-sm btn-danger delete-chatbot" data-id="${chatbot.id}" data-name="${chatbot.name}">
+                                <button class="btn btn-sm btn-danger delete-chatbot" data-id="${escapeHtml(chatbot.id)}" data-name="${escapeHtml(chatbot.name)}">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
