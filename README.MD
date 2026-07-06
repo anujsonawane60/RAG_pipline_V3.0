@@ -1,201 +1,168 @@
 # Multi-LLM RAG Chatbot
 
-This project implements a Retrieval-Augmented Generation (RAG) chatbot platform that allows users to create chatbots, upload documents, and chat with them using multiple Language Models (LLMs).
+Production-ready Retrieval-Augmented Generation (RAG) platform for building and deploying chatbots backed by vector search. Supports document ingestion (PDF/DOCX/TXT), multiple LLM providers (OpenAI, Cohere, TogetherAI), Pinecone for vectors, JWT auth, role-based access, and a simple admin dashboard.
+
+Quick links
+- Docker usage: DOCKER_USAGE.md
+- Example environment: .env.example
+
+Highlights
+- Create, manage, and delete chatbots
+- Upload documents (PDF, DOCX, TXT) to provide retrieval context
+- Choose from multiple LLM providers (OpenAI, Cohere, TogetherAI)
+- Pinecone vector store integration
+- JWT authentication with admin / user roles
+- Public chatbots for anonymous access
+- Web UI (static/) and REST API (FastAPI)
+
+Table of contents
+- Features
+- Architecture & code layout
+- Quickstart (local)
+- Quickstart (Docker)
+- Configuration / environment variables
+- API overview
+- Admin & usage notes
+- Contributing
+- License
 
 ## Features
+- Create, manage, and delete chatbots
+- Upload and validate files (PDF, DOCX, TXT)
+- Chat with chatbots using retrieval-augmented prompts
+- Persistent chat history per chatbot
+- Role-based access (admin / regular user)
+- Public chatbots for anonymous usage
 
-*   Create, manage, and delete chatbots.
-*   Upload PDF, DOCX, and TXT files to provide context.
-*   Chat with chatbots and receive responses.
-*   Choose between OpenAI, Cohere, and TogetherAI language models.
-*   Chat history is saved.
-*   The type and size of the uploaded files are validated.
-*   User authentication system with registration and login.
-*   Role-based access control with admin and regular user roles.
-*   Admin users can view and manage all chatbots.
-*   Regular users can only access their own chatbots.
-*   Secure JWT token-based authentication.
-*   **Public chatbots** that can be accessed by anyone without login.
-*   Admin dashboard to manage all chatbots and toggle their public visibility.
-*   Public chatbot showcase on the homepage for easy access.
-
-## Tech Stack
-
-*   FastAPI
-*   Pinecone
-*   Cohere
-*   OpenAI
-*   TogetherAI
-*   Python 3.10+
-*   Uvicorn
-*   PyPDF2
-*   docx
-*   Bootstrap 5
-*   JavaScript
-
-## Installation
-
-### Local Installation
-
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/anujsonawane60/RAG_Pipeline_V3.git
-    ```
-2.  Navigate to the project directory:
-    ```bash
-    cd your-repo-name
-    ```
-3.  Create a virtual environment (recommended):
-    ```bash
-    python3 -m venv myenv
-    ```
-4.  Activate the virtual environment:
-    ```bash
-    myenv\Scripts\activate
-    ```
-5.  Install the dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
-6. Create a `.env` file and add your API Keys.
+## Architecture & repo layout
+Top-level important entries:
 
 ```
-OPENAI_API_KEY=your_openai_key
-COHERE_API_KEY=your_cohere_key
-TOGETHERAI_API_KEY=your_togetherai_key
-PINECONE_API_KEY=your_pinecone_key
-JWT_SECRET_KEY=your_strong_random_secret_here
-HOST_USERNAME=host_admin
-HOST_PASSWORD=your_strong_admin_password_here
+app/                FastAPI application code (routes, services, models)
+  ├── routes/        HTTP endpoints (auth_routes.py, chatbot_routes.py)
+  ├── services/      Business logic (chatbot_manager.py, user_manager.py)
+  └── models/        Pydantic schemas
+static/             Frontend HTML (index.html, chatbot.html, admin.html, auth.html)
+main.py             FastAPI app entrypoint
+requirements.txt    Python dependencies
+Dockerfile          Docker image build
+docker-compose.yml  Compose for local Docker setup
+DOCKER_USAGE.md     Detailed notes on using the pre-built image
+.env.example        Template environment variables
+README.MD           This file
 ```
 
-See `.env.example` for a complete template.
+How it fits together
+- main.py mounts the FastAPI app under app/ and serves static/ HTML pages for the frontend.
+- app/routes contains the HTTP endpoints. chatbot_routes.py handles chatbot creation, file upload, ask, and history; auth_routes.py handles registration/login and user info.
+- app/services contains managers for chatbot lifecycle, user management, and text processing (ingestion & chunking).
+- Pinecone is used as the vector store; LLM providers are pluggable via configuration.
 
-7. Run the app:
+## Quickstart — Local (minimal)
+1. Clone the repository:
+```bash
+git clone https://github.com/anujsonawane60/RAG_pipline_V3.0.git
+cd RAG_pipline_V3.0
+```
+2. Create and activate a virtual environment:
+```bash
+python3 -m venv .venv
+# macOS / Linux
+source .venv/bin/activate
+# Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
+```
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+4. Copy `.env.example` to `.env` and fill in keys (see Configuration below):
+```bash
+cp .env.example .env
+# edit .env to add API keys and secrets
+```
+5. Run the app:
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+6. Open http://127.0.0.1:8000/ to view the frontend (index.html) and the API docs at http://127.0.0.1:8000/docs
+
+## Quickstart — Docker
+Build & run with docker-compose (recommended):
 
 ```bash
-uvicorn main:app --reload
+docker-compose up -d --build
 ```
 
-### Docker Installation
+Or run the pre-built image (replace image name):
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/anujsonawane60/RAG_Pipeline_V3.git
-   ```
+```bash
+docker run -d \
+  --name rag-chatbot \
+  -p 8000:8000 \
+  --env-file .env \
+  -v rag_uploaded_files:/app/uploaded_files \
+  -v rag_chat_history:/app/chat_history \
+  -v rag_data:/app/data \
+  yourusername/rag-chatbot:latest
+```
 
-2. Navigate to the project directory:
-   ```bash
-   cd your-repo-name
-   ```
+See DOCKER_USAGE.md for details and published image examples.
 
-3. Create a `.env` file with your API keys as shown above.
+## Configuration / environment variables
+Copy `.env.example` to `.env` and populate the keys. Important variables used by the app (examples):
 
-4. Build and run the Docker container:
-   ```bash
-   docker-compose up -d
-   ```
+```
+OPENAI_API_KEY=
+COHERE_API_KEY=
+TOGETHERAI_API_KEY=
+PINECONE_API_KEY=
+JWT_SECRET_KEY=
+HOST_USERNAME=
+HOST_PASSWORD=
+```
 
-5. The application will be available at http://localhost:8000
+- JWT_SECRET_KEY: used to sign access tokens — use a strong random value in production.
+- HOST_USERNAME / HOST_PASSWORD: convenience admin credentials (configured in the environment).
+- Pinecone/OpenAI/Cohere credentials: required if you intend to use those providers.
 
-### Using Pre-built Docker Image
+## API overview
+Authentication
+- POST /register — create a new user
+- POST /token — get an access token (JWT)
+- GET /users/me — get current user info
 
-You can also use the pre-built Docker image from Docker Hub:
+Chatbot & usage
+- GET /chatbots — list chatbots for the current user (admin sees all)
+- GET /public-chatbots — list public chatbots (no auth required)
+- POST /chatbot/create — create a new chatbot
+- DELETE /chatbot/{chatbot_id} — delete a chatbot
+- POST /chatbot/{chatbot_id}/upload — upload files to a chatbot
+- POST /chatbot/{chatbot_id}/ask — send a question to a chatbot
+- GET /chatbot/{chatbot_id}/history — fetch chat history
+- POST /chatbot/{chatbot_id}/update-visibility — admin-only visibility toggle
 
-1. Create a `.env` file with your API keys as shown above.
+Admin routes
+- GET /admin — admin dashboard (web UI)
 
-2. Run the container directly:
-   ```bash
-   docker run -d \
-     --name rag-chatbot \
-     -p 8000:8000 \
-     --env-file .env \
-     -v rag_uploaded_files:/app/uploaded_files \
-     -v rag_chat_history:/app/chat_history \
-     -v rag_data:/app/data \
-     yourusername/rag-chatbot:latest
-   ```
-   
-   Replace `yourusername/rag-chatbot:latest` with the actual image name from Docker Hub.
+## Usage notes
+- File uploads are validated for type/size before ingestion. Text is chunked and embedded then written to Pinecone.
+- Chat history is saved under the chat_history directory (or inside container volume when using Docker).
+- Public chatbots let anonymous users ask questions but do not allow modification.
 
-3. Alternatively, use the docker-compose approach with the published image:
-   
-   Create a `docker-compose.yml` file:
-   ```yaml
-   version: '3.8'
-   
-   services:
-     rag-chatbot:
-       image: yourusername/rag-chatbot:latest
-       ports:
-         - "8000:8000"
-       volumes:
-         - rag_uploaded_files:/app/uploaded_files
-         - rag_chat_history:/app/chat_history
-         - rag_data:/app/data
-       env_file:
-         - .env
-       restart: always
-   
-   volumes:
-     rag_uploaded_files:
-     rag_chat_history:
-     rag_data:
-   ```
-
-   Then run:
-   ```bash
-   docker-compose up -d
-   ```
-
-For more details on using the Docker image, see the [DOCKER_USAGE.md](DOCKER_USAGE.md) file.
-
-## Usage
-1. Go to http://127.0.0.1:8000/
-2. Register a new account or log in with existing credentials.
-3. Admin access uses the `HOST_USERNAME` and `HOST_PASSWORD` set in your `.env` file.
-4. Click on `Dashboard` in the menu.
-5. Create a chatbot by clicking on the `Create New` button.
-6. Select a chatbot.
-7. Upload a file by clicking on `Choose File` and then `Upload File`.
-8. Select a model and send messages to the chatbot.
-
-### Admin Features
-1. Log in as admin using the credentials from your `.env` file.
-2. Access the Admin Dashboard by clicking the "Admin Dashboard" link in the navigation.
-3. View all chatbots in the system and their creators.
-4. Toggle chatbots between public and private visibility.
-5. Delete any chatbot in the system.
-
-### Public Chatbots
-1. Public chatbots are displayed on the homepage and can be used by anyone without login.
-2. To create a public chatbot, log in as an admin and check the "Make this chatbot public" option when creating a new chatbot.
-3. Existing chatbots can be made public by toggling the switch in the admin dashboard.
-4. Public chatbots allow anonymous users to chat with them, but not modify them.
-
-## API Endpoints
-
-### Authentication Endpoints
-- **POST /register**: Register a new user account
-- **POST /token**: Log in and get an access token
-- **GET /users/me**: Get current authenticated user information
-
-### Chatbot Endpoints
-- **GET /chatbots**: List all chatbots (admin sees all, users see only their own)
-- **GET /public-chatbots**: List all public chatbots (no authentication required)
-- **POST /chatbot/create**: Create a new chatbot
-- **DELETE /chatbot/{chatbot_id}**: Delete a chatbot
-- **POST /chatbot/{chatbot_id}/upload**: Upload a file to a chatbot
-- **POST /chatbot/{chatbot_id}/ask**: Chat with a chatbot
-- **GET /chatbot/{chatbot_id}/history**: Get chat history for a chatbot
-- **POST /chatbot/{chatbot_id}/update-visibility**: Update chatbot visibility (admin only)
-
-### Admin Routes
-- **GET /admin**: Access the admin dashboard (admin users only)
+## Troubleshooting & common tasks
+- If the frontend doesn't appear, ensure uvicorn is running and static files are being served by FastAPI.
+- If Pinecone errors occur, verify API key and index configuration in app/config.py.
+- To reset demo data when using Docker volumes, remove the named volumes and restart docker-compose.
 
 ## Contributing
+Contributions are welcome. Open an issue or submit a PR with a clear description of the change and tests/documentation when applicable.
 
 ## License
+Include your license here (e.g., MIT) or add a LICENSE file at the repository root.
 
-
-
+---
+If you want, I can also:
+- Add badges (build / license) to the top of the README
+- Expand the Configuration section with a full `.env.example` snippet pulled from the repo
+- Create a short quick demo script and update DOCKER_USAGE.md
